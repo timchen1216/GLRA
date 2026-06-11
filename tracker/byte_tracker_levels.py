@@ -1,21 +1,23 @@
 import numpy as np
 from collections import deque
- 
+
 import os.path as osp
 import copy
 import torch
 import torch.nn.functional as F
-from tracker import pbcvt 
+from tracker import pbcvt
 from .kalman_filter import KalmanFilter
 from .matching import *
 from .basetrack import BaseTrack, TrackState
 
+
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
+
     def __init__(self, tlwh, score):
 
         # wait activate
-        self._tlwh = np.asarray(tlwh, dtype=np.float)
+        self._tlwh = np.asarray(tlwh, dtype=np.float64)
         self.kalman_filter = None
         self.mean, self.covariance = None, None
         self.is_activated = False
@@ -23,12 +25,12 @@ class STrack(BaseTrack):
 
         self.score = score
         self.tracklet_len = 0
-        
+
     def _get_deep_vec(self):
         cx = self._tlwh[0] + 0.5 * self._tlwh[2]
-        y2 = self._tlwh[1] +  self._tlwh[3]
+        y2 = self._tlwh[1] + self._tlwh[3]
         lendth = 2000 - y2
-        return np.asarray([cx, y2, lendth], dtype=np.float)
+        return np.asarray([cx, y2, lendth], dtype=np.float64)
 
     def predict(self):
         mean_state = self.mean.copy()
@@ -36,7 +38,9 @@ class STrack(BaseTrack):
             mean_state[6] = 0
             mean_state[7] = 0
 
-        self.mean, self.covariance = self.kalman_filter.predict(mean_state, self.covariance)
+        self.mean, self.covariance = self.kalman_filter.predict(
+            mean_state, self.covariance
+        )
 
     @staticmethod
     def multi_predict(stracks):
@@ -47,7 +51,9 @@ class STrack(BaseTrack):
                 if st.state != TrackState.Tracked:
                     multi_mean[i][6] = 0
                     multi_mean[i][7] = 0
-            multi_mean, multi_covariance = STrack.shared_kalman.multi_predict(multi_mean, multi_covariance)
+            multi_mean, multi_covariance = STrack.shared_kalman.multi_predict(
+                multi_mean, multi_covariance
+            )
             for i, (mean, cov) in enumerate(zip(multi_mean, multi_covariance)):
                 stracks[i].mean = mean
                 stracks[i].covariance = cov
@@ -57,7 +63,9 @@ class STrack(BaseTrack):
         self.kalman_filter = kalman_filter
         self.track_id = self.next_id()
 
-        self.mean, self.covariance = self.kalman_filter.initiate(self.tlwh_to_xywh(self._tlwh))
+        self.mean, self.covariance = self.kalman_filter.initiate(
+            self.tlwh_to_xywh(self._tlwh)
+        )
 
         self.tracklet_len = 0
         self.state = TrackState.Tracked
@@ -68,7 +76,9 @@ class STrack(BaseTrack):
 
     def re_activate(self, new_track, frame_id, new_id=False):
 
-        self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, self.tlwh_to_xywh(new_track.tlwh))
+        self.mean, self.covariance = self.kalman_filter.update(
+            self.mean, self.covariance, self.tlwh_to_xywh(new_track.tlwh)
+        )
         self.tracklet_len = 0
         self.state = TrackState.Tracked
         self.is_activated = True
@@ -90,7 +100,9 @@ class STrack(BaseTrack):
 
         new_tlwh = new_track.tlwh
 
-        self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, self.tlwh_to_xywh(new_tlwh))
+        self.mean, self.covariance = self.kalman_filter.update(
+            self.mean, self.covariance, self.tlwh_to_xywh(new_tlwh)
+        )
 
         self.state = TrackState.Tracked
         self.is_activated = True
@@ -104,7 +116,7 @@ class STrack(BaseTrack):
             multi_covariance = np.asarray([st.covariance for st in stracks])
 
             R = H[:2, :2]
-            R8x8 = np.kron(np.eye(4, dtype=float), R)# np.kron
+            R8x8 = np.kron(np.eye(4, dtype=float), R)  # np.kron
             t = H[:2, 2]
 
             for i, (mean, cov) in enumerate(zip(multi_mean, multi_covariance)):
@@ -114,11 +126,11 @@ class STrack(BaseTrack):
 
                 stracks[i].mean = mean
                 stracks[i].covariance = cov
-    
+
     @property
     def tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,
-                width, height)`.
+        width, height)`.
         """
         if self.mean is None:
             return self._tlwh.copy()
@@ -134,6 +146,7 @@ class STrack(BaseTrack):
         ret = self.tlwh.copy()
         ret[2:] += ret[:2]
         return ret
+
     @property
     def xywh(self):
         """Convert bounding box to format `(min x, min y, max x, max y)`, i.e.,
@@ -142,6 +155,7 @@ class STrack(BaseTrack):
         ret = self.tlwh.copy()
         ret[:2] += ret[2:] / 2.0
         return ret
+
     @property
     # @jit(nopython=True)
     def deep_vec(self):
@@ -150,9 +164,9 @@ class STrack(BaseTrack):
         """
         ret = self.tlwh.copy()
         cx = ret[0] + 0.5 * ret[2]
-        y2 = ret[1] +  ret[3]
+        y2 = ret[1] + ret[3]
         lendth = 2000 - y2
-        return np.asarray([cx, y2, lendth], dtype=np.float)
+        return np.asarray([cx, y2, lendth], dtype=np.float64)
 
     @staticmethod
     # @jit(nopython=True)
@@ -173,10 +187,10 @@ class STrack(BaseTrack):
         ret = np.asarray(tlwh).copy()
         ret[:2] += ret[2:] / 2
         return ret
-    
+
     def to_xyah(self):
         return self.tlwh_to_xyah(self.tlwh)
-    
+
     def to_xywh(self):
         return self.tlwh_to_xywh(self.tlwh)
 
@@ -194,7 +208,7 @@ class STrack(BaseTrack):
         return ret
 
     def __repr__(self):
-        return 'OT_{}_({}-{})'.format(self.track_id, self.start_frame, self.end_frame)
+        return "OT_{}_({}-{})".format(self.track_id, self.start_frame, self.end_frame)
 
 
 class BYTETracker_levels(object):
@@ -205,13 +219,13 @@ class BYTETracker_levels(object):
 
         self.frame_id = 0
         self.args = args
-        #self.det_thresh = args.track_thresh
+        # self.det_thresh = args.track_thresh
         self.det_thresh = args.track_thresh + 0.1
         self.buffer_size = int(frame_rate / 30.0 * args.track_buffer)
         self.max_time_lost = self.buffer_size
         self.kalman_filter = KalmanFilter()
-        self.layers = args.depth_levels 
-        
+        self.layers = args.depth_levels
+
     def get_deep_range(self, obj, step):
         col = []
         for t in obj:
@@ -219,48 +233,66 @@ class BYTETracker_levels(object):
             col.append(lend)
         max_len, mix_len = max(col), min(col)
         if max_len != mix_len:
-            deep_range =np.arange(mix_len, max_len, (max_len - mix_len + 1) / step)
+            deep_range = np.arange(mix_len, max_len, (max_len - mix_len + 1) / step)
             if deep_range[-1] < max_len:
-                deep_range = np.concatenate([deep_range, np.array([max_len],)])
+                deep_range = np.concatenate(
+                    [
+                        deep_range,
+                        np.array(
+                            [max_len],
+                        ),
+                    ]
+                )
                 deep_range[0] = np.floor(deep_range[0])
                 deep_range[-1] = np.ceil(deep_range[-1])
-        else:    
-            deep_range = [mix_len,] 
-        mask = self.get_sub_mask(deep_range, col)      
+        else:
+            deep_range = [
+                mix_len,
+            ]
+        mask = self.get_sub_mask(deep_range, col)
         return mask
-    
+
     def get_sub_mask(self, deep_range, col):
-        mix_len=deep_range[0]
-        max_len=deep_range[-1]
+        mix_len = deep_range[0]
+        max_len = deep_range[-1]
         if max_len == mix_len:
-            lc = mix_len   
+            lc = mix_len
         mask = []
         for d in deep_range:
             if d > deep_range[0] and d < deep_range[-1]:
-                mask.append((col >= lc) & (col < d)) 
+                mask.append((col >= lc) & (col < d))
                 lc = d
             elif d == deep_range[-1]:
-                mask.append((col >= lc) & (col <= d)) 
-                lc = d 
+                mask.append((col >= lc) & (col <= d))
+                lc = d
             else:
                 lc = d
                 continue
         return mask
-    
-    def DCM(self, detections, tracks, activated_starcks, refind_stracks, levels, thresh, is_fuse):
+
+    def DCM(
+        self,
+        detections,
+        tracks,
+        activated_starcks,
+        refind_stracks,
+        levels,
+        thresh,
+        is_fuse,
+    ):
         if len(detections) > 0:
-            det_mask = self.get_deep_range(detections, levels) 
+            det_mask = self.get_deep_range(detections, levels)
         else:
             det_mask = []
 
-        if len(tracks)!=0:
+        if len(tracks) != 0:
             track_mask = self.get_deep_range(tracks, levels)
         else:
             track_mask = []
 
         u_detection, u_tracks, res_det, res_track = [], [], [], []
         if len(track_mask) != 0:
-            if  len(track_mask) < len(det_mask):
+            if len(track_mask) < len(det_mask):
                 for i in range(len(det_mask) - len(track_mask)):
                     idx = np.argwhere(det_mask[len(track_mask) + i] == True)
                     for idd in idx:
@@ -270,12 +302,12 @@ class BYTETracker_levels(object):
                     idx = np.argwhere(track_mask[len(det_mask) + i] == True)
                     for idd in idx:
                         res_track.append(tracks[idd[0]])
-        
+
             for dm, tm in zip(det_mask, track_mask):
                 det_idx = np.argwhere(dm == True)
                 trk_idx = np.argwhere(tm == True)
-                
-                # search det 
+
+                # search det
                 det_ = []
                 for idd in det_idx:
                     det_.append(detections[idd[0]])
@@ -286,7 +318,7 @@ class BYTETracker_levels(object):
                     track_.append(tracks[idt[0]])
                 # update trk
                 track_ = track_ + u_tracks
-                
+
                 dists = iou_distance(track_, det_)
                 if (not self.args.mot20) and is_fuse:
                     dists = fuse_score(dists, det_)
@@ -302,23 +334,23 @@ class BYTETracker_levels(object):
                         refind_stracks.append(track)
                 u_tracks = [track_[t] for t in u_track_]
                 u_detection = [det_[t] for t in u_det_]
-                
+
             u_tracks = u_tracks + res_track
             u_detection = u_detection + res_det
 
         else:
             u_detection = detections
-            
+
         return activated_starcks, refind_stracks, u_tracks, u_detection
 
-    def update(self,  output_results, curr_img = None):
+    def update(self, output_results, curr_img=None):
         self.frame_id += 1
         activated_starcks = []
         refind_stracks = []
         lost_stracks = []
         removed_stracks = []
         # current detections
-        bboxes = output_results.pred_boxes.tensor.cpu().numpy()# x1y1x2y2 
+        bboxes = output_results.pred_boxes.tensor.cpu().numpy()  # x1y1x2y2
         scores = output_results.scores.cpu().numpy()
 
         remain_inds = scores > self.args.track_thresh
@@ -332,13 +364,15 @@ class BYTETracker_levels(object):
         scores_second = scores[inds_second]
 
         if len(dets) > 0:
-            '''Detections'''
-            detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s) for
-                          (tlbr, s) in zip(dets, scores_keep)]
+            """Detections"""
+            detections = [
+                STrack(STrack.tlbr_to_tlwh(tlbr), s)
+                for (tlbr, s) in zip(dets, scores_keep)
+            ]
         else:
             detections = []
 
-        ''' Add newly detected tracklets to tracked_stracks'''
+        """ Add newly detected tracklets to tracked_stracks"""
         unconfirmed = []
         tracked_stracks = []  # type: list[STrack]
         for track in self.tracked_stracks:
@@ -347,46 +381,50 @@ class BYTETracker_levels(object):
             else:
                 tracked_stracks.append(track)
 
-        ''' Step 2: First association, with high score detection boxes'''
+        """ Step 2: First association, with high score detection boxes"""
         strack_pool = joint_stracks(tracked_stracks, self.lost_stracks)
         # Predict the current location with KF
         STrack.multi_predict(strack_pool)
-        
+
         # DCM
         activated_starcks, refind_stracks, u_track, u_detection_high = self.DCM(
-                                                                                detections, 
-                                                                                strack_pool, 
-                                                                                activated_starcks,
-                                                                                refind_stracks, 
-                                                                                self.layers, 
-                                                                                self.args.match_thresh, 
-                                                                                is_fuse=True)  
+            detections,
+            strack_pool,
+            activated_starcks,
+            refind_stracks,
+            self.layers,
+            self.args.match_thresh,
+            is_fuse=True,
+        )
 
-        ''' Step 3: Second association, with low score detection boxes'''
+        """ Step 3: Second association, with low score detection boxes"""
         # association the untrack to the low score detections
         if len(dets_second) > 0:
-            '''Detections'''
-            detections_second = [STrack(STrack.tlbr_to_tlwh(tlbr), s) for
-                          (tlbr, s) in zip(dets_second, scores_second)]
+            """Detections"""
+            detections_second = [
+                STrack(STrack.tlbr_to_tlwh(tlbr), s)
+                for (tlbr, s) in zip(dets_second, scores_second)
+            ]
         else:
             detections_second = []
         r_tracked_stracks = [i for i in u_track if i.state == TrackState.Tracked]
- 
+
         # DCM
         activated_starcks, refind_stracks, u_strack, u_detection_sec = self.DCM(
-                                                                                detections_second, 
-                                                                                r_tracked_stracks, 
-                                                                                activated_starcks, 
-                                                                                refind_stracks, 
-                                                                                self.args.depth_levels_low, 
-                                                                                0.35, 
-                                                                                is_fuse=False) 
+            detections_second,
+            r_tracked_stracks,
+            activated_starcks,
+            refind_stracks,
+            self.args.depth_levels_low,
+            0.35,
+            is_fuse=False,
+        )
         for track in u_strack:
             if not track.state == TrackState.Lost:
                 track.mark_lost()
-                lost_stracks.append(track) 
+                lost_stracks.append(track)
 
-        '''Deal with unconfirmed tracks, usually tracks with only one beginning frame'''
+        """Deal with unconfirmed tracks, usually tracks with only one beginning frame"""
         detections = [i for i in u_detection_high]
         dists = iou_distance(unconfirmed, detections)
         if not self.args.mot20:
@@ -415,18 +453,23 @@ class BYTETracker_levels(object):
 
         # print('Ramained match {} s'.format(t4-t3))
 
-        self.tracked_stracks = [t for t in self.tracked_stracks if t.state == TrackState.Tracked]
+        self.tracked_stracks = [
+            t for t in self.tracked_stracks if t.state == TrackState.Tracked
+        ]
         self.tracked_stracks = joint_stracks(self.tracked_stracks, activated_starcks)
         self.tracked_stracks = joint_stracks(self.tracked_stracks, refind_stracks)
         self.lost_stracks = sub_stracks(self.lost_stracks, self.tracked_stracks)
         self.lost_stracks.extend(lost_stracks)
         self.lost_stracks = sub_stracks(self.lost_stracks, self.removed_stracks)
         self.removed_stracks.extend(removed_stracks)
-        self.tracked_stracks, self.lost_stracks = remove_duplicate_stracks(self.tracked_stracks, self.lost_stracks)
+        self.tracked_stracks, self.lost_stracks = remove_duplicate_stracks(
+            self.tracked_stracks, self.lost_stracks
+        )
         # get scores of lost tracks
         output_stracks = [track for track in self.tracked_stracks if track.is_activated]
 
         return output_stracks
+
 
 def joint_stracks(tlista, tlistb):
     exists = {}

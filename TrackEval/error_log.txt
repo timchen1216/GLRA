@@ -16,11 +16,11 @@ Traceback (most recent call last):
   File "/data/zelinliu/DanceTrack/TrackEval/trackeval/datasets/_base_dataset.py", line 92, in get_raw_seq_data
     raw_gt_data = self._load_raw_file(tracker, seq, is_gt=True)
   File "/data/zelinliu/DanceTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 227, in _load_raw_file
-    time_data = np.asarray(read_data[time_key], dtype=np.float)
+    time_data = np.asarray(read_data[time_key], dtype=np.float64)
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/site-packages/numpy/__init__.py", line 305, in __getattr__
     raise AttributeError(__former_attrs__[attr])
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 """
@@ -35,7 +35,7 @@ Traceback (most recent call last):
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/multiprocessing/pool.py", line 771, in get
     raise self._value
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 
@@ -61,11 +61,11 @@ Traceback (most recent call last):
   File "/data/zelinliu/DanceTrack/TrackEval/trackeval/datasets/_base_dataset.py", line 92, in get_raw_seq_data
     raw_gt_data = self._load_raw_file(tracker, seq, is_gt=True)
   File "/data/zelinliu/DanceTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 227, in _load_raw_file
-    time_data = np.asarray(read_data[time_key], dtype=np.float)
+    time_data = np.asarray(read_data[time_key], dtype=np.float64)
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/site-packages/numpy/__init__.py", line 305, in __getattr__
     raise AttributeError(__former_attrs__[attr])
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 """
@@ -80,7 +80,7 @@ Traceback (most recent call last):
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/multiprocessing/pool.py", line 771, in get
     raise self._value
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 
@@ -106,11 +106,11 @@ Traceback (most recent call last):
   File "/data/zelinliu/DanceTrack/TrackEval/trackeval/datasets/_base_dataset.py", line 92, in get_raw_seq_data
     raw_gt_data = self._load_raw_file(tracker, seq, is_gt=True)
   File "/data/zelinliu/DanceTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 227, in _load_raw_file
-    time_data = np.asarray(read_data[time_key], dtype=np.float)
+    time_data = np.asarray(read_data[time_key], dtype=np.float64)
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/site-packages/numpy/__init__.py", line 305, in __getattr__
     raise AttributeError(__former_attrs__[attr])
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 """
@@ -125,7 +125,7 @@ Traceback (most recent call last):
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/multiprocessing/pool.py", line 771, in get
     raise self._value
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 
@@ -151,11 +151,11 @@ Traceback (most recent call last):
   File "/data/zelinliu/DCTrack/TrackEval/trackeval/datasets/_base_dataset.py", line 92, in get_raw_seq_data
     raw_gt_data = self._load_raw_file(tracker, seq, is_gt=True)
   File "/data/zelinliu/DCTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 227, in _load_raw_file
-    time_data = np.asarray(read_data[time_key], dtype=np.float)
+    time_data = np.asarray(read_data[time_key], dtype=np.float64)
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/site-packages/numpy/__init__.py", line 305, in __getattr__
     raise AttributeError(__former_attrs__[attr])
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 """
@@ -170,7 +170,7 @@ Traceback (most recent call last):
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/multiprocessing/pool.py", line 771, in get
     raise self._value
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 
@@ -196,11 +196,11 @@ Traceback (most recent call last):
   File "/data/zelinliu/DCTrack/TrackEval/trackeval/datasets/_base_dataset.py", line 92, in get_raw_seq_data
     raw_gt_data = self._load_raw_file(tracker, seq, is_gt=True)
   File "/data/zelinliu/DCTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 227, in _load_raw_file
-    time_data = np.asarray(read_data[time_key], dtype=np.float)
+    time_data = np.asarray(read_data[time_key], dtype=np.float64)
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/site-packages/numpy/__init__.py", line 305, in __getattr__
     raise AttributeError(__former_attrs__[attr])
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 """
@@ -215,7 +215,7 @@ Traceback (most recent call last):
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/multiprocessing/pool.py", line 771, in get
     raise self._value
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 
@@ -241,11 +241,11 @@ Traceback (most recent call last):
   File "/data/zelinliu/DCTrack/TrackEval/trackeval/datasets/_base_dataset.py", line 92, in get_raw_seq_data
     raw_gt_data = self._load_raw_file(tracker, seq, is_gt=True)
   File "/data/zelinliu/DCTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 227, in _load_raw_file
-    time_data = np.asarray(read_data[time_key], dtype=np.float)
+    time_data = np.asarray(read_data[time_key], dtype=np.float64)
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/site-packages/numpy/__init__.py", line 305, in __getattr__
     raise AttributeError(__former_attrs__[attr])
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 """
@@ -260,7 +260,7 @@ Traceback (most recent call last):
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/multiprocessing/pool.py", line 771, in get
     raise self._value
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 
@@ -286,11 +286,11 @@ Traceback (most recent call last):
   File "/data/zelinliu/DCTrack/TrackEval/trackeval/datasets/_base_dataset.py", line 92, in get_raw_seq_data
     raw_gt_data = self._load_raw_file(tracker, seq, is_gt=True)
   File "/data/zelinliu/DCTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 227, in _load_raw_file
-    time_data = np.asarray(read_data[time_key], dtype=np.float)
+    time_data = np.asarray(read_data[time_key], dtype=np.float64)
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/site-packages/numpy/__init__.py", line 305, in __getattr__
     raise AttributeError(__former_attrs__[attr])
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 """
@@ -305,7 +305,179 @@ Traceback (most recent call last):
   File "/home/zelinliu/miniconda3/envs/lz/lib/python3.8/multiprocessing/pool.py", line 771, in get
     raise self._value
 AttributeError: module 'numpy' has no attribute 'float'.
-`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+`np.float64` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+
+
+
+
+
+MotChallenge2DBox
+
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 48, in mapstar
+    return list(map(*args))
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/_timing.py", line 64, in wrap
+    return f(*args, **kw)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/eval.py", line 195, in eval_sequence
+    data = dataset.get_preprocessed_seq_data(raw_data, cls)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/_timing.py", line 64, in wrap
+    return f(*args, **kw)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 454, in get_preprocessed_seq_data
+    to_remove_tracker = np.array([], np.int)
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/site-packages/numpy/__init__.py", line 324, in __getattr__
+    raise AttributeError(__former_attrs__[attr])
+AttributeError: module 'numpy' has no attribute 'int'.
+`np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/eval.py", line 81, in evaluate
+    results = pool.map(_eval_sequence, seq_list)
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 364, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 771, in get
+    raise self._value
+AttributeError: module 'numpy' has no attribute 'int'.
+`np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+
+
+
+
+
+MotChallenge2DBox
+
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 48, in mapstar
+    return list(map(*args))
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/_timing.py", line 64, in wrap
+    return f(*args, **kw)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/eval.py", line 195, in eval_sequence
+    data = dataset.get_preprocessed_seq_data(raw_data, cls)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/_timing.py", line 64, in wrap
+    return f(*args, **kw)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 454, in get_preprocessed_seq_data
+    to_remove_tracker = np.array([], np.int)
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/site-packages/numpy/__init__.py", line 324, in __getattr__
+    raise AttributeError(__former_attrs__[attr])
+AttributeError: module 'numpy' has no attribute 'int'.
+`np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/eval.py", line 81, in evaluate
+    results = pool.map(_eval_sequence, seq_list)
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 364, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 771, in get
+    raise self._value
+AttributeError: module 'numpy' has no attribute 'int'.
+`np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+
+
+
+
+
+MotChallenge2DBox
+
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 48, in mapstar
+    return list(map(*args))
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/_timing.py", line 64, in wrap
+    return f(*args, **kw)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/eval.py", line 195, in eval_sequence
+    data = dataset.get_preprocessed_seq_data(raw_data, cls)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/_timing.py", line 64, in wrap
+    return f(*args, **kw)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 454, in get_preprocessed_seq_data
+    to_remove_tracker = np.array([], np.int)
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/site-packages/numpy/__init__.py", line 324, in __getattr__
+    raise AttributeError(__former_attrs__[attr])
+AttributeError: module 'numpy' has no attribute 'int'.
+`np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/eval.py", line 81, in evaluate
+    results = pool.map(_eval_sequence, seq_list)
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 364, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 771, in get
+    raise self._value
+AttributeError: module 'numpy' has no attribute 'int'.
+`np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+
+
+
+
+
+MotChallenge2DBox
+
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 48, in mapstar
+    return list(map(*args))
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/_timing.py", line 64, in wrap
+    return f(*args, **kw)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/eval.py", line 195, in eval_sequence
+    data = dataset.get_preprocessed_seq_data(raw_data, cls)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/_timing.py", line 64, in wrap
+    return f(*args, **kw)
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/datasets/mot_challenge_2d_box.py", line 454, in get_preprocessed_seq_data
+    to_remove_tracker = np.array([], np.int)
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/site-packages/numpy/__init__.py", line 324, in __getattr__
+    raise AttributeError(__former_attrs__[attr])
+AttributeError: module 'numpy' has no attribute 'int'.
+`np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/caig/repo/SparseTrack/TrackEval/trackeval/eval.py", line 81, in evaluate
+    results = pool.map(_eval_sequence, seq_list)
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 364, in map
+    return self._map_async(func, iterable, mapstar, chunksize).get()
+  File "/home/caig/anaconda3/envs/sparsetrack/lib/python3.9/multiprocessing/pool.py", line 771, in get
+    raise self._value
+AttributeError: module 'numpy' has no attribute 'int'.
+`np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
 The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
     https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
 

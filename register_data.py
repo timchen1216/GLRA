@@ -1,4 +1,5 @@
 from detectron2.data import DatasetCatalog, MetadataCatalog
+
 # Copyright (c) Facebook, Inc. and its affiliates.
 import contextlib
 import io
@@ -10,7 +11,10 @@ from detectron2.utils.file_io import PathManager
 
 logger = logging.getLogger(__name__)
 
-def load_coco_json(json_file, image_root, dataset_name=None, extra_annotation_keys=None):
+
+def load_coco_json(
+    json_file, image_root, dataset_name=None, extra_annotation_keys=None
+):
     from pycocotools.coco import COCO
 
     timer = Timer()
@@ -18,7 +22,9 @@ def load_coco_json(json_file, image_root, dataset_name=None, extra_annotation_ke
     with contextlib.redirect_stdout(io.StringIO()):
         coco_api = COCO(json_file)
     if timer.seconds() > 1:
-        logger.info("Loading {} takes {:.2f} seconds.".format(json_file, timer.seconds()))
+        logger.info(
+            "Loading {} takes {:.2f} seconds.".format(json_file, timer.seconds())
+        )
 
     id_map = None
     if dataset_name is not None:
@@ -39,11 +45,9 @@ def load_coco_json(json_file, image_root, dataset_name=None, extra_annotation_ke
         # apply this mapping as well but print a warning.
         if not (min(cat_ids) == 1 and max(cat_ids) == len(cat_ids)):
             if "coco" not in dataset_name:
-                logger.warning(
-                    """
+                logger.warning("""
 Category ids in annotations are not in [1, #categories]! We'll apply a mapping for you.
-"""
-                )
+""")
         id_map = {v: i for i, v in enumerate(cat_ids)}
         meta.thing_dataset_id_to_contiguous_id = id_map
 
@@ -87,16 +91,20 @@ Category ids in annotations are not in [1, #categories]! We'll apply a mapping f
         # However the ratio of buggy annotations there is tiny and does not affect accuracy.
         # Therefore we explicitly white-list them.
         ann_ids = [ann["id"] for anns_per_image in anns for ann in anns_per_image]
-        assert len(set(ann_ids)) == len(ann_ids), "Annotation ids in '{}' are not unique!".format(
-            json_file
-        )
+        assert len(set(ann_ids)) == len(
+            ann_ids
+        ), "Annotation ids in '{}' are not unique!".format(json_file)
 
     imgs_anns = list(zip(imgs, anns))
-    logger.info("Loaded {} images in COCO format from {}".format(len(imgs_anns), json_file))
+    logger.info(
+        "Loaded {} images in COCO format from {}".format(len(imgs_anns), json_file)
+    )
 
     dataset_dicts = []
 
-    ann_keys = ["iscrowd", "bbox", "keypoints", "category_id"] + (extra_annotation_keys or [])
+    ann_keys = ["iscrowd", "bbox", "keypoints", "category_id"] + (
+        extra_annotation_keys or []
+    )
     # id': ann_cnt,
     # 'image_id': image_cnt + frame_id,
     # 'track_id': tid_curr,
@@ -104,7 +112,7 @@ Category ids in annotations are not in [1, #categories]! We'll apply a mapping f
 
     num_instances_without_valid_segmentation = 0
 
-    for (img_dict, anno_dict_list) in imgs_anns:
+    for img_dict, anno_dict_list in imgs_anns:
         record = {}
         record["file_name"] = os.path.join(image_root, img_dict["file_name"])
         record["height"] = img_dict["height"]
@@ -124,18 +132,20 @@ Category ids in annotations are not in [1, #categories]! We'll apply a mapping f
             # actually contains bugs that, together with certain ways of using COCO API,
             # can trigger this assertion.
             # import pdb;pdb.set_trace()
-            if anno.get('conf', 1) <= 0.:
+            if anno.get("conf", 1) <= 0.0:
                 continue
-            
-            if anno['category_id'] != 1 :
+
+            if anno["category_id"] != 1:
                 continue
-            
+
             assert anno["image_id"] == image_id
 
-            assert anno.get("ignore", 0) == 0, '"ignore" in COCO json file is not supported.'
+            assert (
+                anno.get("ignore", 0) == 0
+            ), '"ignore" in COCO json file is not supported.'
 
             obj = {key: anno[key] for key in ann_keys if key in anno}
-            
+
             if "bbox" in obj and len(obj["bbox"]) == 0:
                 raise ValueError(
                     f"One annotation of image {image_id} contains empty 'bbox' value! "
@@ -143,7 +153,7 @@ Category ids in annotations are not in [1, #categories]! We'll apply a mapping f
                 )
 
             obj["bbox_mode"] = BoxMode.XYWH_ABS
-                   
+
             if id_map:
                 annotation_category_id = obj["category_id"]
                 try:
@@ -168,10 +178,21 @@ Category ids in annotations are not in [1, #categories]! We'll apply a mapping f
     return dataset_dicts
 
 
-VAL_JSON="/data/zelinliu/MOT20/annotations/val_half.json"
-# VAL_JSON = '/data/zelinliu/MOT17/annotations/test.json'
-VAL_PATH="/data/zelinliu/MOT20/train"
-DatasetCatalog.register("my_val", lambda: load_coco_json(VAL_JSON, VAL_PATH, "my_val", ["id"]))
-MetadataCatalog.get("my_val").set(thing_classes=[ "pedestrian"], # pedestrian
-                                                json_file=VAL_JSON,
-                                                image_root=VAL_PATH)
+# VAL_JSON = "/home/caig/data/MOT17/annotations/train.json"
+# VAL_PATH = "/home/caig/data/MOT17/train"
+
+# VAL_JSON = "/home/caig/data/MOT20/annotations/train.json"
+# VAL_PATH = "/home/caig/data/MOT20/train"
+
+# VAL_JSON = "/home/caig/data/MOT17/annotations/test.json"
+# VAL_PATH = "/home/caig/data/MOT17/test"
+
+VAL_JSON = "/home/caig/data/MOT20/annotations/test.json"
+VAL_PATH = "/home/caig/data/MOT20/test"
+
+DatasetCatalog.register(
+    "my_val", lambda: load_coco_json(VAL_JSON, VAL_PATH, "my_val", ["id"])
+)
+MetadataCatalog.get("my_val").set(
+    thing_classes=["pedestrian"], json_file=VAL_JSON, image_root=VAL_PATH  # pedestrian
+)

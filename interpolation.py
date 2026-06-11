@@ -7,7 +7,8 @@ import os
 import numpy as np
 import copy
 import motmetrics as mm
-mm.lap.default_solver = 'lap'
+
+mm.lap.default_solver = "lap"
 
 
 class Evaluator(object):
@@ -21,11 +22,13 @@ class Evaluator(object):
         self.reset_accumulator()
 
     def load_annotations(self):
-        assert self.data_type == 'mot'
+        assert self.data_type == "mot"
 
-        gt_filename = os.path.join(self.data_root, self.seq_name, 'gt', 'gt.txt')
+        gt_filename = os.path.join(self.data_root, self.seq_name, "gt", "gt.txt")
         self.gt_frame_dict = read_results(gt_filename, self.data_type, is_gt=True)
-        self.gt_ignore_frame_dict = read_results(gt_filename, self.data_type, is_ignore=True)
+        self.gt_ignore_frame_dict = read_results(
+            gt_filename, self.data_type, is_ignore=True
+        )
 
     def reset_accumulator(self):
         self.acc = mm.MOTAccumulator(auto_id=True)
@@ -48,7 +51,9 @@ class Evaluator(object):
         iou_distance = mm.distances.iou_matrix(ignore_tlwhs, trk_tlwhs, max_iou=0.5)
         if len(iou_distance) > 0:
             match_is, match_js = mm.lap.linear_sum_assignment(iou_distance)
-            match_is, match_js = map(lambda a: np.asarray(a, dtype=int), [match_is, match_js])
+            match_is, match_js = map(
+                lambda a: np.asarray(a, dtype=int), [match_is, match_js]
+            )
             match_ious = iou_distance[match_is, match_js]
 
             match_js = np.asarray(match_js, dtype=int)
@@ -56,15 +61,15 @@ class Evaluator(object):
             keep[match_js] = False
             trk_tlwhs = trk_tlwhs[keep]
             trk_ids = trk_ids[keep]
-        #match_is, match_js = mm.lap.linear_sum_assignment(iou_distance)
-        #match_is, match_js = map(lambda a: np.asarray(a, dtype=int), [match_is, match_js])
-        #match_ious = iou_distance[match_is, match_js]
+        # match_is, match_js = mm.lap.linear_sum_assignment(iou_distance)
+        # match_is, match_js = map(lambda a: np.asarray(a, dtype=int), [match_is, match_js])
+        # match_ious = iou_distance[match_is, match_js]
 
-        #match_js = np.asarray(match_js, dtype=int)
-        #match_js = match_js[np.logical_not(np.isnan(match_ious))]
-        #keep[match_js] = False
-        #trk_tlwhs = trk_tlwhs[keep]
-        #trk_ids = trk_ids[keep]
+        # match_js = np.asarray(match_js, dtype=int)
+        # match_js = match_js[np.logical_not(np.isnan(match_ious))]
+        # keep[match_js] = False
+        # trk_tlwhs = trk_tlwhs[keep]
+        # trk_ids = trk_ids[keep]
 
         # get distance matrix
         iou_distance = mm.distances.iou_matrix(gt_tlwhs, trk_tlwhs, max_iou=0.5)
@@ -72,8 +77,14 @@ class Evaluator(object):
         # acc
         self.acc.update(gt_ids, trk_ids, iou_distance)
 
-        if rtn_events and iou_distance.size > 0 and hasattr(self.acc, 'last_mot_events'):
-            events = self.acc.last_mot_events  # only supported by https://github.com/longcw/py-motmetrics
+        if (
+            rtn_events
+            and iou_distance.size > 0
+            and hasattr(self.acc, "last_mot_events")
+        ):
+            events = (
+                self.acc.last_mot_events
+            )  # only supported by https://github.com/longcw/py-motmetrics
         else:
             events = None
         return events
@@ -82,7 +93,7 @@ class Evaluator(object):
         self.reset_accumulator()
 
         result_frame_dict = read_results(filename, self.data_type, is_gt=False)
-        #frames = sorted(list(set(self.gt_frame_dict.keys()) | set(result_frame_dict.keys())))
+        # frames = sorted(list(set(self.gt_frame_dict.keys()) | set(result_frame_dict.keys())))
         frames = sorted(list(set(result_frame_dict.keys())))
         for frame_id in frames:
             trk_objs = result_frame_dict.get(frame_id, [])
@@ -92,7 +103,11 @@ class Evaluator(object):
         return self.acc
 
     @staticmethod
-    def get_summary(accs, names, metrics=('mota', 'num_switches', 'idp', 'idr', 'idf1', 'precision', 'recall')):
+    def get_summary(
+        accs,
+        names,
+        metrics=("mota", "num_switches", "idp", "idr", "idf1", "precision", "recall"),
+    ):
         names = copy.deepcopy(names)
         if metrics is None:
             metrics = mm.metrics.motchallenge_metrics
@@ -100,10 +115,7 @@ class Evaluator(object):
 
         mh = mm.metrics.create()
         summary = mh.compute_many(
-            accs,
-            metrics=metrics,
-            names=names,
-            generate_overall=True
+            accs, metrics=metrics, names=names, generate_overall=True
         )
 
         return summary
@@ -111,19 +123,17 @@ class Evaluator(object):
     @staticmethod
     def save_summary(summary, filename):
         import pandas as pd
+
         writer = pd.ExcelWriter(filename)
         summary.to_excel(writer)
         writer.save()
 
 
-
-
-
 def read_results(filename, data_type: str, is_gt=False, is_ignore=False):
-    if data_type in ('mot', 'lab'):
+    if data_type in ("mot", "lab"):
         read_fun = read_mot_results
     else:
-        raise ValueError('Unknown data type: {}'.format(data_type))
+        raise ValueError("Unknown data type: {}".format(data_type))
 
     return read_fun(filename, is_gt, is_ignore)
 
@@ -151,9 +161,9 @@ def read_mot_results(filename, is_gt, is_ignore):
     ignore_labels = {2, 7, 8, 12}
     results_dict = dict()
     if os.path.isfile(filename):
-        with open(filename, 'r') as f:
+        with open(filename, "r") as f:
             for line in f.readlines():
-                linelist = line.split(',')
+                linelist = line.split(",")
                 if len(linelist) < 7:
                     continue
                 fid = int(linelist[0])
@@ -164,14 +174,14 @@ def read_mot_results(filename, is_gt, is_ignore):
                 box_size = float(linelist[4]) * float(linelist[5])
 
                 if is_gt:
-                    if 'MOT16-' in filename or 'MOT17-' in filename:
+                    if "MOT16-" in filename or "MOT17-" in filename:
                         label = int(float(linelist[7]))
                         mark = int(float(linelist[6]))
                         if mark == 0 or label not in valid_labels:
                             continue
                     score = 1
                 elif is_ignore:
-                    if 'MOT16-' in filename or 'MOT17-' in filename:
+                    if "MOT16-" in filename or "MOT17-" in filename:
                         label = int(float(linelist[7]))
                         vis_ratio = float(linelist[8])
                         if label not in ignore_labels and vis_ratio >= 0:
@@ -182,10 +192,10 @@ def read_mot_results(filename, is_gt, is_ignore):
                 else:
                     score = float(linelist[6])
 
-                #if box_size > 7000:
-                #if box_size <= 7000 or box_size >= 15000:
-                #if box_size < 15000:
-                    #continue
+                # if box_size > 7000:
+                # if box_size <= 7000 or box_size >= 15000:
+                # if box_size < 15000:
+                # continue
 
                 tlwh = tuple(map(float, linelist[2:6]))
                 target_id = int(linelist[1])
@@ -215,16 +225,14 @@ def eval_mota(data_root, txt_path):
     # seqs = sorted([s for s in os.listdir(data_root) if s.endswith('FRCNN')])
     seqs = sorted([s for s in os.listdir(data_root)])
     for seq in seqs:
-        video_out_path = os.path.join(txt_path, seq + '.txt')
-        evaluator = Evaluator(data_root, seq, 'mot')
+        video_out_path = os.path.join(txt_path, seq + ".txt")
+        evaluator = Evaluator(data_root, seq, "mot")
         accs.append(evaluator.eval_file(video_out_path))
     metrics = mm.metrics.motchallenge_metrics
     mh = mm.metrics.create()
     summary = Evaluator.get_summary(accs, seqs, metrics)
     strsummary = mm.io.render_summary(
-        summary,
-        formatters=mh.formatters,
-        namemap=mm.io.motchallenge_metric_names
+        summary, formatters=mh.formatters, namemap=mm.io.motchallenge_metric_names
     )
     print(strsummary)
 
@@ -234,44 +242,44 @@ def get_mota(data_root, txt_path):
     # seqs = sorted([s for s in os.listdir(data_root) if s.endswith('FRCNN')])
     seqs = sorted([s for s in os.listdir(data_root)])
     for seq in seqs:
-        video_out_path = os.path.join(txt_path, seq + '.txt')
-        evaluator = Evaluator(data_root, seq, 'mot')
+        video_out_path = os.path.join(txt_path, seq + ".txt")
+        evaluator = Evaluator(data_root, seq, "mot")
         accs.append(evaluator.eval_file(video_out_path))
     metrics = mm.metrics.motchallenge_metrics
     mh = mm.metrics.create()
     summary = Evaluator.get_summary(accs, seqs, metrics)
     strsummary = mm.io.render_summary(
-        summary,
-        formatters=mh.formatters,
-        namemap=mm.io.motchallenge_metric_names
+        summary, formatters=mh.formatters, namemap=mm.io.motchallenge_metric_names
     )
-    mota = float(strsummary.split(' ')[-6][:-1])
+    mota = float(strsummary.split(" ")[-6][:-1])
     return mota
 
 
 def write_results_score(filename, results):
-    save_format = '{frame},{id},{x1},{y1},{w},{h},{s},-1,-1,-1\n'
-    with open(filename, 'w') as f:
+    save_format = "{frame},{id},{x1},{y1},{w},{h},{s},-1,-1,-1\n"
+    with open(filename, "w") as f:
         for i in range(results.shape[0]):
             frame_data = results[i]
             frame_id = int(frame_data[0])
             track_id = int(frame_data[1])
             x1, y1, w, h = frame_data[2:6]
             score = frame_data[6]
-            line = save_format.format(frame=frame_id, id=track_id, x1=x1, y1=y1, w=w, h=h, s=-1)
+            line = save_format.format(
+                frame=frame_id, id=track_id, x1=x1, y1=y1, w=w, h=h, s=-1
+            )
             f.write(line)
 
 
 def dti(txt_path, save_path, n_min=25, n_dti=20):
-    seq_txts = sorted(glob.glob(os.path.join(txt_path, '*.txt')))
+    seq_txts = sorted(glob.glob(os.path.join(txt_path, "*.txt")))
     for seq_txt in seq_txts:
-        seq_name = seq_txt.split('/')[-1]
-        seq_data = np.loadtxt(seq_txt, dtype=np.float64, delimiter=',')
+        seq_name = seq_txt.split("/")[-1]
+        seq_data = np.loadtxt(seq_txt, dtype=np.float64, delimiter=",")
         min_id = int(np.min(seq_data[:, 1]))
         max_id = int(np.max(seq_data[:, 1]))
         seq_results = np.zeros((1, 10), dtype=np.float64)
         for track_id in range(min_id, max_id + 1):
-            index = (seq_data[:, 1] == track_id)
+            index = seq_data[:, 1] == track_id
             tracklet = seq_data[index]
             tracklet_dti = tracklet
             if tracklet.shape[0] == 0:
@@ -294,8 +302,9 @@ def dti(txt_path, save_path, n_min=25, n_dti=20):
                         left_bbox = tracklet[i - 1, 2:6]
                         for j in range(1, num_bi + 1):
                             curr_frame = j + left_frame
-                            curr_bbox = (curr_frame - left_frame) * (right_bbox - left_bbox) / \
-                                        (right_frame - left_frame) + left_bbox
+                            curr_bbox = (curr_frame - left_frame) * (
+                                right_bbox - left_bbox
+                            ) / (right_frame - left_frame) + left_bbox
                             frames_dti[curr_frame] = curr_bbox
                 num_dti = len(frames_dti.keys())
                 if num_dti > 0:
@@ -313,20 +322,42 @@ def dti(txt_path, save_path, n_min=25, n_dti=20):
         write_results_score(save_seq_txt, seq_results)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # data_root = '/data/zelinliu/DanceTrack/dancetrack/test'
-    data_root = '/data/zelinliu/MOT17/test'
-    txt_path = '/data/zelinliu/sparsetrack/yolox_mix17/yolox_mix17_det/track_results'
-    save_path = '/data/zelinliu/sparsetrack/yolox_mix17/yolox_mix17_det/track_results_dti'
-    
+    # data_root = "/home/caig/data/MOT17/train"
+    # txt_path = "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results"
+    # save_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_dti"
+    # )
+    # data_root = "/home/caig/data/MOT20/train"
+    # txt_path = "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results"
+    # save_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_dti"
+    # )
+
+    # data_root = "/home/caig/data/MOT17/test"
+    # txt_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test"
+    # )
+    # save_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test_dti"
+    # )
+    data_root = "/home/caig/data/MOT20/test"
+    txt_path = (
+        "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test"
+    )
+    save_path = (
+        "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test_dti"
+    )
+
     mkdir_if_missing(save_path)
     dti(txt_path, save_path, n_min=5, n_dti=20)
-    print('Before DTI: ')
+    print("Before DTI: ")
     eval_mota(data_root, txt_path)
-    print('After DTI:')
+    print("After DTI:")
     eval_mota(data_root, save_path)
 
-    '''
+    """
     mota_best = 0.0
     best_n_min = 0
     best_n_dti = 0
@@ -340,4 +371,4 @@ if __name__ == '__main__':
                 best_n_dti = n_dti
                 print(mota_best, best_n_min, best_n_dti)
     print(mota_best, best_n_min, best_n_dti)
-    '''
+    """

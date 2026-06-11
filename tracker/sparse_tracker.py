@@ -1,21 +1,24 @@
 import numpy as np
 from collections import deque
- 
+
 import os.path as osp
 import copy
 import torch
 import torch.nn.functional as F
-from tracker import pbcvt 
+from tracker import pbcvt
 from .kalman_filter import KalmanFilter
 from .matching import *
 from .basetrack import BaseTrack, TrackState
 
+
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
+    gpr_maxlen = 30  # overridden by SparseTracker.__init__ via args.gpr_history_len
+
     def __init__(self, tlwh, score):
 
         # wait activate
-        self._tlwh = np.asarray(tlwh, dtype=np.float)
+        self._tlwh = np.asarray(tlwh, dtype=np.float64)
         self.kalman_filter = None
         self.mean, self.covariance = None, None
         self.is_activated = False
@@ -23,12 +26,13 @@ class STrack(BaseTrack):
 
         self.score = score
         self.tracklet_len = 0
-        
+        self.gpr_obs = []  # list of (frame_id, cx, cy, w, h)
+
     def _get_deep_vec(self):
         cx = self._tlwh[0] + 0.5 * self._tlwh[2]
-        y2 = self._tlwh[1] +  self._tlwh[3]
+        y2 = self._tlwh[1] + self._tlwh[3]
         lendth = 2000 - y2
-        return np.asarray([cx, y2, lendth], dtype=np.float)
+        return np.asarray([cx, y2, lendth], dtype=np.float64)
 
     def predict(self):
         mean_state = self.mean.copy()
@@ -36,7 +40,9 @@ class STrack(BaseTrack):
             mean_state[6] = 0
             mean_state[7] = 0
 
-        self.mean, self.covariance = self.kalman_filter.predict(mean_state, self.covariance)
+        self.mean, self.covariance = self.kalman_filter.predict(
+            mean_state, self.covariance
+        )
 
     @staticmethod
     def multi_predict(stracks):
@@ -47,7 +53,9 @@ class STrack(BaseTrack):
                 if st.state != TrackState.Tracked:
                     multi_mean[i][6] = 0
                     multi_mean[i][7] = 0
-            multi_mean, multi_covariance = STrack.shared_kalman.multi_predict(multi_mean, multi_covariance)
+            multi_mean, multi_covariance = STrack.shared_kalman.multi_predict(
+                multi_mean, multi_covariance
+            )
             for i, (mean, cov) in enumerate(zip(multi_mean, multi_covariance)):
                 stracks[i].mean = mean
                 stracks[i].covariance = cov
@@ -57,7 +65,9 @@ class STrack(BaseTrack):
         self.kalman_filter = kalman_filter
         self.track_id = self.next_id()
 
-        self.mean, self.covariance = self.kalman_filter.initiate(self.tlwh_to_xywh(self._tlwh))
+        self.mean, self.covariance = self.kalman_filter.initiate(
+            self.tlwh_to_xywh(self._tlwh)
+        )
 
         self.tracklet_len = 0
         self.state = TrackState.Tracked
@@ -68,7 +78,9 @@ class STrack(BaseTrack):
 
     def re_activate(self, new_track, frame_id, new_id=False):
 
-        self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, self.tlwh_to_xywh(new_track.tlwh))
+        self.mean, self.covariance = self.kalman_filter.update(
+            self.mean, self.covariance, self.tlwh_to_xywh(new_track.tlwh)
+        )
         self.tracklet_len = 0
         self.state = TrackState.Tracked
         self.is_activated = True
@@ -76,6 +88,12 @@ class STrack(BaseTrack):
         if new_id:
             self.track_id = self.next_id()
         self.score = new_track.score
+
+        # Record observation for GPR history
+        xywh = self.xywh
+        self.gpr_obs.append((frame_id, xywh[0], xywh[1], xywh[2], xywh[3]))
+        if len(self.gpr_obs) > STrack.gpr_maxlen:
+            self.gpr_obs.pop(0)
 
     def update(self, new_track, frame_id):
         """
@@ -90,12 +108,20 @@ class STrack(BaseTrack):
 
         new_tlwh = new_track.tlwh
 
-        self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, self.tlwh_to_xywh(new_tlwh))
+        self.mean, self.covariance = self.kalman_filter.update(
+            self.mean, self.covariance, self.tlwh_to_xywh(new_tlwh)
+        )
 
         self.state = TrackState.Tracked
         self.is_activated = True
 
         self.score = new_track.score
+
+        # Record observation for GPR history
+        xywh = self.xywh
+        self.gpr_obs.append((frame_id, xywh[0], xywh[1], xywh[2], xywh[3]))
+        if len(self.gpr_obs) > STrack.gpr_maxlen:
+            self.gpr_obs.pop(0)
 
     @staticmethod
     def multi_gmc(stracks, H=np.eye(2, 3)):
@@ -104,7 +130,7 @@ class STrack(BaseTrack):
             multi_covariance = np.asarray([st.covariance for st in stracks])
 
             R = H[:2, :2]
-            R8x8 = np.kron(np.eye(4, dtype=float), R)# np.kron 
+            R8x8 = np.kron(np.eye(4, dtype=float), R)  # np.kron
             t = H[:2, 2]
 
             for i, (mean, cov) in enumerate(zip(multi_mean, multi_covariance)):
@@ -114,11 +140,34 @@ class STrack(BaseTrack):
 
                 stracks[i].mean = mean
                 stracks[i].covariance = cov
-    
+
+    @staticmethod
+    def multi_gmc_history(stracks, H=np.eye(2, 3)):
+        """
+        Apply the same affine warp used for KF means to the GPR observation
+        history of each track, so historical (cx, cy) stay in the same
+        coordinate system as the current frame.
+
+        Only the position (cx, cy) is warped; w and h are scale-invariant
+        for the affine warp used by SparseTrack's GMC.
+        """
+        if len(stracks) == 0:
+            return
+        R = H[:2, :2]  # (2, 2)
+        t = H[:2, 2]  # (2,)
+        for track in stracks:
+            if len(track.gpr_obs) == 0:
+                continue
+            new_obs = []
+            for fid, cx, cy, w, h in track.gpr_obs:
+                pt = R @ np.array([cx, cy]) + t
+                new_obs.append((fid, float(pt[0]), float(pt[1]), w, h))
+            track.gpr_obs = new_obs
+
     @property
     def tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,
-                width, height)`.
+        width, height)`.
         """
         if self.mean is None:
             return self._tlwh.copy()
@@ -134,6 +183,7 @@ class STrack(BaseTrack):
         ret = self.tlwh.copy()
         ret[2:] += ret[:2]
         return ret
+
     @property
     def xywh(self):
         """Convert bounding box to format `(min x, min y, max x, max y)`, i.e.,
@@ -142,6 +192,7 @@ class STrack(BaseTrack):
         ret = self.tlwh.copy()
         ret[:2] += ret[2:] / 2.0
         return ret
+
     @property
     # @jit(nopython=True)
     def deep_vec(self):
@@ -150,9 +201,9 @@ class STrack(BaseTrack):
         """
         ret = self.tlwh.copy()
         cx = ret[0] + 0.5 * ret[2]
-        y2 = ret[1] +  ret[3]
+        y2 = ret[1] + ret[3]
         lendth = 2000 - y2
-        return np.asarray([cx, y2, lendth], dtype=np.float)
+        return np.asarray([cx, y2, lendth], dtype=np.float64)
 
     @staticmethod
     # @jit(nopython=True)
@@ -173,10 +224,10 @@ class STrack(BaseTrack):
         ret = np.asarray(tlwh).copy()
         ret[:2] += ret[2:] / 2
         return ret
-    
+
     def to_xyah(self):
         return self.tlwh_to_xyah(self.tlwh)
-    
+
     def to_xywh(self):
         return self.tlwh_to_xywh(self.tlwh)
 
@@ -194,30 +245,55 @@ class STrack(BaseTrack):
         return ret
 
     def __repr__(self):
-        return 'OT_{}_({}-{})'.format(self.track_id, self.start_frame, self.end_frame)
+        return "OT_{}_({}-{})".format(self.track_id, self.start_frame, self.end_frame)
 
 
 class SparseTracker(object):
-    def __init__(self, args, frame_rate = 30):
+    def __init__(self, args, frame_rate=30):
         self.tracked_stracks = []  # type: list[STrack]
         self.lost_stracks = []  # type: list[STrack]
         self.removed_stracks = []  # type: list[STrack]
 
         self.frame_id = 0
         self.args = args
- 
-        if '_half.json' in args.val_ann:
+
+        if "_half.json" in args.val_ann:
             self.det_thresh = args.track_thresh + 0.1
         else:
             self.det_thresh = args.track_thresh + 0.05
-            
+
         self.pre_img = None
         self.buffer_size = int(frame_rate / 30.0 * args.track_buffer)
         self.max_time_lost = self.buffer_size
         self.kalman_filter = KalmanFilter()
         self.down_scale = args.down_scale
-        self.layers = args.depth_levels 
-           
+        self.layers = args.depth_levels
+        self.mot20 = getattr(args, "mot20", False)
+        self.use_diou = getattr(args, "use_diou", False)
+
+        # GLRA config
+        self.use_glra = getattr(args, "use_glra", False)
+        self.gpr_history_len = getattr(args, "gpr_history_len", 30)
+        self.glra_thresh = getattr(args, "glra_thresh", 0.7)
+        self.gpr_min_lost = getattr(args, "gpr_min_lost", 2)
+        self.gpr_max_lost = getattr(args, "gpr_max_lost", 5)
+        self.gpr_min_obs = getattr(args, "gpr_min_obs", 3)
+        self.use_gmc_history = getattr(args, "use_gmc_history", True)
+        STrack.gpr_maxlen = self.gpr_history_len
+
+        # GLRA uncertainty-adaptive threshold config
+        # When enabled, each lost track's matching threshold is relaxed
+        # proportional to GPR predictive uncertainty (σ in pixels):
+        #   sigma_penalty = clip(σ / glra_sigma_scale, 0, 1) * glra_thresh_range
+        #   adaptive_thresh_i = min(glra_thresh + sigma_penalty, glra_max_thresh)
+        # Rationale: high σ → prediction unreliable → loosen gate so a
+        # spatially displaced re-appearance can still be recovered.
+        # Low σ → confident prediction → keep gate tight to avoid FP.
+        self.glra_adaptive = getattr(args, "glra_adaptive", False)
+        self.glra_sigma_scale = getattr(args, "glra_sigma_scale", 30.0)
+        self.glra_thresh_range = getattr(args, "glra_thresh_range", 0.25)
+        self.glra_max_thresh = getattr(args, "glra_max_thresh", 0.85)
+
     def get_deep_range(self, obj, step):
         col = []
         for t in obj:
@@ -225,48 +301,66 @@ class SparseTracker(object):
             col.append(lend)
         max_len, mix_len = max(col), min(col)
         if max_len != mix_len:
-            deep_range =np.arange(mix_len, max_len, (max_len - mix_len + 1) / step)
+            deep_range = np.arange(mix_len, max_len, (max_len - mix_len + 1) / step)
             if deep_range[-1] < max_len:
-                deep_range = np.concatenate([deep_range, np.array([max_len],)])
+                deep_range = np.concatenate(
+                    [
+                        deep_range,
+                        np.array(
+                            [max_len],
+                        ),
+                    ]
+                )
                 deep_range[0] = np.floor(deep_range[0])
                 deep_range[-1] = np.ceil(deep_range[-1])
-        else:    
-            deep_range = [mix_len,] 
-        mask = self.get_sub_mask(deep_range, col)      
+        else:
+            deep_range = [
+                mix_len,
+            ]
+        mask = self.get_sub_mask(deep_range, col)
         return mask
-    
+
     def get_sub_mask(self, deep_range, col):
-        mix_len=deep_range[0]
-        max_len=deep_range[-1]
+        mix_len = deep_range[0]
+        max_len = deep_range[-1]
         if max_len == mix_len:
-            lc = mix_len   
+            lc = mix_len
         mask = []
         for d in deep_range:
             if d > deep_range[0] and d < deep_range[-1]:
-                mask.append((col >= lc) & (col < d)) 
+                mask.append((col >= lc) & (col < d))
                 lc = d
             elif d == deep_range[-1]:
-                mask.append((col >= lc) & (col <= d)) 
-                lc = d 
+                mask.append((col >= lc) & (col <= d))
+                lc = d
             else:
                 lc = d
                 continue
         return mask
-    
-    def DCM(self, detections, tracks, activated_starcks, refind_stracks, levels, thresh, is_fuse):
+
+    def DCM(
+        self,
+        detections,
+        tracks,
+        activated_starcks,
+        refind_stracks,
+        levels,
+        thresh,
+        is_fuse,
+    ):
         if len(detections) > 0:
-            det_mask = self.get_deep_range(detections, levels) 
+            det_mask = self.get_deep_range(detections, levels)
         else:
             det_mask = []
 
-        if len(tracks)!=0:
+        if len(tracks) != 0:
             track_mask = self.get_deep_range(tracks, levels)
         else:
             track_mask = []
 
         u_detection, u_tracks, res_det, res_track = [], [], [], []
         if len(track_mask) != 0:
-            if  len(track_mask) < len(det_mask):
+            if len(track_mask) < len(det_mask):
                 for i in range(len(det_mask) - len(track_mask)):
                     idx = np.argwhere(det_mask[len(track_mask) + i] == True)
                     for idd in idx:
@@ -276,12 +370,12 @@ class SparseTracker(object):
                     idx = np.argwhere(track_mask[len(det_mask) + i] == True)
                     for idd in idx:
                         res_track.append(tracks[idd[0]])
-        
+
             for dm, tm in zip(det_mask, track_mask):
                 det_idx = np.argwhere(dm == True)
                 trk_idx = np.argwhere(tm == True)
-                
-                # search det 
+
+                # search det
                 det_ = []
                 for idd in det_idx:
                     det_.append(detections[idd[0]])
@@ -292,8 +386,12 @@ class SparseTracker(object):
                     track_.append(tracks[idt[0]])
                 # update trk
                 track_ = track_ + u_tracks
-                
-                dists = iou_distance(track_, det_)
+
+                dists = (
+                    diou_distance(track_, det_)
+                    if self.use_diou
+                    else iou_distance(track_, det_)
+                )
                 if (not self.args.mot20) and is_fuse:
                     dists = fuse_score(dists, det_)
                 matches, u_track_, u_det_ = linear_assignment(dists, thresh)
@@ -308,28 +406,27 @@ class SparseTracker(object):
                         refind_stracks.append(track)
                 u_tracks = [track_[t] for t in u_track_]
                 u_detection = [det_[t] for t in u_det_]
-                
+
             u_tracks = u_tracks + res_track
             u_detection = u_detection + res_det
 
         else:
             u_detection = detections
-            
+
         return activated_starcks, refind_stracks, u_tracks, u_detection
-        
-        
-    def update(self, output_results, curr_img = None):
+
+    def update(self, output_results, curr_img=None):
         self.frame_id += 1
         if self.frame_id == 1:
             self.pre_img = None
-            
+
         # init stracks
         activated_starcks = []
         refind_stracks = []
         lost_stracks = []
         removed_stracks = []
         # current detections
-        bboxes = output_results.pred_boxes.tensor.cpu().numpy()# x1y1x2y2 
+        bboxes = output_results.pred_boxes.tensor.cpu().numpy()  # x1y1x2y2
         scores = output_results.scores.cpu().numpy()
 
         # divide high-score dets and low-scores dets
@@ -341,7 +438,7 @@ class SparseTracker(object):
         dets = bboxes[remain_inds]
         scores_keep = scores[remain_inds]
         scores_second = scores[inds_second]
-        
+
         # tracks preprocess
         unconfirmed = []
         tracked_stracks = []  # type: list[STrack]
@@ -350,69 +447,132 @@ class SparseTracker(object):
                 unconfirmed.append(track)
             else:
                 tracked_stracks.append(track)
-        
-        
+
         # init high-score dets
         if len(dets) > 0:
-            detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s) for
-                          (tlbr, s) in zip(dets, scores_keep)]   
+            detections = [
+                STrack(STrack.tlbr_to_tlwh(tlbr), s)
+                for (tlbr, s) in zip(dets, scores_keep)
+            ]
         else:
             detections = []
-        # get strack_pool   
+        # get strack_pool
         strack_pool = joint_stracks(tracked_stracks, self.lost_stracks)
-        
+
         # predict the current location with KF
         STrack.multi_predict(strack_pool)
-        
-        # use GMC: for mot20 dancetrack--unenabled GMC: 368 - 373
-        if self.pre_img is not None:
-            warp = pbcvt.GMC(curr_img, self.pre_img, self.down_scale)
-        else:
-            warp = np.eye(3,3)
-        STrack.multi_gmc(strack_pool, warp[:2, :])
-        STrack.multi_gmc(unconfirmed, warp[:2, :])
-        
+
+        if not self.mot20:
+            # use GMC: for mot20 dancetrack--unenabled GMC: 368 - 373
+            if self.pre_img is not None:
+                warp = pbcvt.GMC(curr_img, self.pre_img, self.down_scale)
+            else:
+                warp = np.eye(3, 3)
+            STrack.multi_gmc(strack_pool, warp[:2, :])
+            STrack.multi_gmc(unconfirmed, warp[:2, :])
+
+            # Compensate GPR observation history for camera motion
+            if self.use_glra and self.use_gmc_history and self.pre_img is not None:
+                STrack.multi_gmc_history(strack_pool, warp[:2, :])
+
         # DCM
         activated_starcks, refind_stracks, u_track, u_detection_high = self.DCM(
-                                                                                detections, 
-                                                                                strack_pool, 
-                                                                                activated_starcks,
-                                                                                refind_stracks, 
-                                                                                self.layers, 
-                                                                                self.args.match_thresh, 
-                                                                                is_fuse=True)  
-            
-            
+            detections,
+            strack_pool,
+            activated_starcks,
+            refind_stracks,
+            self.layers,
+            self.args.match_thresh,
+            is_fuse=True,
+        )
+
         # association the untrack to the low score detections
         if len(dets_second) > 0:
-            '''Detections'''
-            detections_second = [STrack(STrack.tlbr_to_tlwh(tlbr), s) for
-                          (tlbr, s) in zip(dets_second, scores_second)]
+            """Detections"""
+            detections_second = [
+                STrack(STrack.tlbr_to_tlwh(tlbr), s)
+                for (tlbr, s) in zip(dets_second, scores_second)
+            ]
         else:
             detections_second = []
-        r_tracked_stracks = [t for t in u_track if t.state == TrackState.Tracked]   
-        
+        r_tracked_stracks = [t for t in u_track if t.state == TrackState.Tracked]
+
         # DCM
         activated_starcks, refind_stracks, u_strack, u_detection_sec = self.DCM(
-                                                                                detections_second, 
-                                                                                r_tracked_stracks, 
-                                                                                activated_starcks, 
-                                                                                refind_stracks, 
-                                                                                self.args.depth_levels_low, 
-                                                                                0.3, 
-                                                                                is_fuse=False) 
+            detections_second,
+            r_tracked_stracks,
+            activated_starcks,
+            refind_stracks,
+            self.args.depth_levels_low,
+            0.3,
+            is_fuse=False,
+        )
         for track in u_strack:
             if not track.state == TrackState.Lost:
                 track.mark_lost()
-                lost_stracks.append(track)  
+                lost_stracks.append(track)
+        gpr_stracks = joint_stracks(
+            self.lost_stracks, lost_stracks
+        )  # stracks available for GLRA
 
-        
-        # Deal with unconfirmed tracks, usually tracks with only one beginning frame 
-        detections = [d for d in u_detection_high ]
-        dists = iou_distance(unconfirmed, detections)
+        def _lost_frames(track):
+            return self.frame_id - track.end_frame
+
+        gpr_stracks = [
+            t
+            for t in gpr_stracks
+            if self.gpr_min_lost <= _lost_frames(t) <= self.gpr_max_lost
+        ]
+
+        # ── GLRA: GPR Lost-track Re-Association ──────────────────────────────
+        # Try to recover unmatched lost tracks using GPR trajectory prediction
+        # against leftover low-score detections from second DCM.
+        if self.use_glra and len(gpr_stracks) > 0 and len(u_detection_sec) > 0:
+            glra_dists, effective_thresh = glra_distance(
+                gpr_stracks,
+                u_detection_sec,
+                self.frame_id,
+                use_diou=self.use_diou,
+                min_obs=self.gpr_min_obs,
+                # Adaptive mode: pass base_thresh so glra_distance computes
+                # per-track sigma_penalty and pre-gates the cost matrix.
+                # effective_thresh (max adaptive threshold used) is returned
+                # and passed to linear_assignment as cost_limit.
+                base_thresh=self.glra_thresh if self.glra_adaptive else None,
+                sigma_scale=self.glra_sigma_scale,
+                thresh_range=self.glra_thresh_range,
+                max_thresh=self.glra_max_thresh,
+            )
+            match_thresh = effective_thresh if self.glra_adaptive else self.glra_thresh
+            glra_matches, u_glra_tracks, _ = linear_assignment(glra_dists, match_thresh)
+
+            # Remove already-marked-lost tracks that GLRA recovers
+            recovered_ids = {gpr_stracks[i].track_id for i, _ in glra_matches}
+            lost_stracks = [t for t in lost_stracks if t.track_id not in recovered_ids]
+
+            for itracked, idet in glra_matches:
+                track = gpr_stracks[itracked]
+                det = u_detection_sec[idet]
+                if track.state == TrackState.Tracked:
+                    track.update(det, self.frame_id)
+                    activated_starcks.append(track)
+                else:
+                    track.re_activate(det, self.frame_id, new_id=False)
+                    refind_stracks.append(track)
+        # ─────────────────────────────────────────────────────────────────────
+
+        # Deal with unconfirmed tracks, usually tracks with only one beginning frame
+        detections = [d for d in u_detection_high]
+        dists = (
+            diou_distance(unconfirmed, detections)
+            if self.use_diou
+            else iou_distance(unconfirmed, detections)
+        )
         if not self.args.mot20:
             dists = fuse_score(dists, detections)
-        matches, u_unconfirmed, u_detection = linear_assignment(dists, thresh = self.args.confirm_thresh) 
+        matches, u_unconfirmed, u_detection = linear_assignment(
+            dists, thresh=self.args.confirm_thresh
+        )
         for itracked, idet in matches:
             unconfirmed[itracked].update(detections[idet], self.frame_id)
             activated_starcks.append(unconfirmed[itracked])
@@ -436,7 +596,9 @@ class SparseTracker(object):
 
         # print('Ramained match {} s'.format(t4-t3))
 
-        self.tracked_stracks = [t for t in self.tracked_stracks if t.state == TrackState.Tracked]
+        self.tracked_stracks = [
+            t for t in self.tracked_stracks if t.state == TrackState.Tracked
+        ]
         self.tracked_stracks = joint_stracks(self.tracked_stracks, activated_starcks)
         self.tracked_stracks = joint_stracks(self.tracked_stracks, refind_stracks)
         self.lost_stracks = sub_stracks(self.lost_stracks, self.tracked_stracks)
@@ -447,6 +609,7 @@ class SparseTracker(object):
         output_stracks = [track for track in self.tracked_stracks if track.is_activated]
         self.pre_img = curr_img
         return output_stracks
+
 
 def joint_stracks(tlista, tlistb):
     exists = {}
