@@ -164,11 +164,19 @@ class MOTEvaluator:
                             if s["lost_frames"]
                             else np.array([0])
                         )
+                        fc = s["confirm_costs_fail"]
+                        fail_str = (
+                            f"fail_cost p50={np.percentile(fc, 50):.2f} "
+                            f"p90={np.percentile(fc, 90):.2f} n={len(fc)}"
+                            if fc
+                            else "fail_cost n/a"
+                        )
                         print(
                             f"[GLRA] {video_names[video_id - 1]}: "
-                            f"attempts={s['attempts']} recovered={s['recovered']} "
                             f"confirmed={s['confirmed']} reverted={s['reverted']} "
-                            f"lost_frames mean={lf.mean():.1f} max={lf.max()}"
+                            f"(unmatched={s['reverted_unmatched']} "
+                            f"inconsistent={s['reverted_inconsistent']}) "
+                            f"| {fail_str}"
                         )
                     if self.args.track.byte:
                         if "levels" in self.args.track.experiment_name:
@@ -284,11 +292,19 @@ class MOTEvaluator:
                         if s["lost_frames"]
                         else np.array([0])
                     )
+                    fc = s["confirm_costs_fail"]
+                    fail_str = (
+                        f"fail_cost p50={np.percentile(fc, 50):.2f} "
+                        f"p90={np.percentile(fc, 90):.2f} n={len(fc)}"
+                        if fc
+                        else "fail_cost n/a"
+                    )
                     print(
                         f"[GLRA] {video_names[video_id]}: "
-                        f"attempts={s['attempts']} recovered={s['recovered']} "
                         f"confirmed={s['confirmed']} reverted={s['reverted']} "
-                        f"lost_frames mean={lf.mean():.1f} max={lf.max()}"
+                        f"(unmatched={s['reverted_unmatched']} "
+                        f"inconsistent={s['reverted_inconsistent']}) "
+                        f"| {fail_str}"
                     )
 
         timer_avgs = np.asarray(timer_avgs)

@@ -288,6 +288,7 @@ class SparseTracker(object):
             args, "glra_confirm_thresh", min(self.glra_thresh + 0.1, 0.6)
         )
         self.glra_pending_recs = []  # 上一幀救回、等待確認的紀錄
+        self.glra_confirm_grace = getattr(args, "glra_confirm_grace", 0)
         self.retro_outputs = []  # 確認成功後要回填的 (frame, tlwh, id, score)
         # GLRA per-sequence stats
         self.glra_stats = {
@@ -297,6 +298,10 @@ class SparseTracker(object):
             "lost_frames": [],
             "confirmed": 0,
             "reverted": 0,
+            "reverted_unmatched": 0,  # 沒被再次匹配而回滾
+            "reverted_inconsistent": 0,  # 有匹配但軌跡不一致而回滾
+            "confirm_costs_pass": [],  # 通過者的 1-DIoU
+            "confirm_costs_fail": [],  # 被打掉者的 1-DIoU
         }
 
         # GLRA uncertainty-adaptive threshold config
@@ -695,6 +700,7 @@ class SparseTracker(object):
                 )
 
                 consistent = True
+                confirm_cost = None
                 if matched_again:
                     # 軌跡一致性:用「救援前」的歷史外插到本幀,
                     # 防止錯接到別人身上後持續吃對方偵測(identity theft)
@@ -706,11 +712,14 @@ class SparseTracker(object):
                             pred_tlbr[None, :].astype(np.float64),
                             track.tlbr[None, :].astype(np.float64),
                         )[0, 0]
-                        consistent = (1.0 - sim) <= self.glra_confirm_thresh
+                        confirm_cost = 1.0 - sim
+                        consistent = confirm_cost <= self.glra_confirm_thresh
 
                 if matched_again and consistent:
                     track.glra_pending = False
                     self.glra_stats["confirmed"] += 1
+                    if confirm_cost is not None:
+                        self.glra_stats["confirm_costs_pass"].append(confirm_cost)
                     self.retro_outputs.append(
                         (
                             rec["recovered_frame"],
@@ -719,8 +728,22 @@ class SparseTracker(object):
                             rec["out_score"],
                         )
                     )
+                elif (
+                    not matched_again
+                    and (self.frame_id - rec["recovered_frame"])
+                    <= self.glra_confirm_grace
+                ):
+                    # 未匹配但還在寬限期:track 已被正常流程 mark_lost,
+                    # 留在 lost pool 等下一幀的 stage-1 關聯,先不回滾
+                    still_pending.append(rec)
                 else:
                     # 回滾:KF / GPR 歷史 / 時間戳全部還原,救援視同未發生
+                    if not matched_again:
+                        self.glra_stats["reverted_unmatched"] += 1
+                    else:
+                        self.glra_stats["reverted_inconsistent"] += 1
+                        if confirm_cost is not None:
+                            self.glra_stats["confirm_costs_fail"].append(confirm_cost)
                     b = rec["backup"]
                     track.mean = b["mean"]
                     track.covariance = b["covariance"]
