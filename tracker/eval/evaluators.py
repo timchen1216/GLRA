@@ -252,6 +252,21 @@ class MOTEvaluator:
                         )
                 # save results
                 results.append((frame_id, online_tlwhs, online_ids, online_scores))
+                # Merge confirmed GLRA recoveries back into their frame
+                if getattr(tracker, "retro_outputs", None):
+                    frame_index = {fr: i for i, (fr, *_rest) in enumerate(results)}
+                    for fr, tlwh, tid, sc in tracker.retro_outputs:
+                        vertical = tlwh[2] / tlwh[3] > 1.6
+                        if (
+                            tlwh[2] * tlwh[3] > self.args.track.min_box_area
+                            and not vertical
+                        ):
+                            i = frame_index.get(fr)
+                            if i is not None:
+                                results[i][1].append(tlwh)
+                                results[i][2].append(tid)
+                                results[i][3].append(sc)
+                    tracker.retro_outputs = []
             timer.toc()
             # if frame_id % 20 == 0:
             #     logger.info('Processing frame {} ({:.2f} fps)'.format(frame_id, 1. / max(1e-5, timer.average_time)))

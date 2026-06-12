@@ -563,6 +563,7 @@ class SparseTracker(object):
             t
             for t in gpr_stracks
             if self.gpr_min_lost <= _lost_frames(t) <= self.gpr_max_lost
+            and not getattr(t, "glra_pending", False)
         ]
 
         # ── GLRA: GPR Lost-track Re-Association ──────────────────────────────
@@ -733,7 +734,8 @@ class SparseTracker(object):
                     self.tracked_stracks = [
                         t for t in self.tracked_stracks if t.track_id != track.track_id
                     ]
-                    self.lost_stracks.append(track)
+                    if all(t.track_id != track.track_id for t in self.lost_stracks):
+                        self.lost_stracks.append(track)
             self.glra_pending_recs = still_pending
         output_stracks = [
             track
