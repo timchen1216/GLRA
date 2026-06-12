@@ -278,7 +278,8 @@ class SparseTracker(object):
         self.gpr_min_lost = getattr(args, "gpr_min_lost", 2)
         self.gpr_max_lost = getattr(args, "gpr_max_lost", 5)
         self.gpr_min_obs = getattr(args, "gpr_min_obs", 3)
-        self.use_gmc_history = getattr(args, "use_gmc_history", True)
+        self.glra_sigma_cap = getattr(args, "glra_sigma_cap", None)
+        self.use_gmc_history = getattr(args, "use_gmc_history", False)
         STrack.gpr_maxlen = self.gpr_history_len
 
         # GLRA uncertainty-adaptive threshold config
@@ -534,6 +535,7 @@ class SparseTracker(object):
                 self.frame_id,
                 use_diou=self.use_diou,
                 min_obs=self.gpr_min_obs,
+                sigma_cap=self.glra_sigma_cap,
                 # Adaptive mode: pass base_thresh so glra_distance computes
                 # per-track sigma_penalty and pre-gates the cost matrix.
                 # effective_thresh (max adaptive threshold used) is returned

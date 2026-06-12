@@ -55,6 +55,7 @@ track = dict(
     gpr_min_obs=5,  # GPR 最少需要幾筆觀測
     gpr_history_len=30,  # 歷史長度
     glra_thresh=0.45,  # 配對 cost threshold（1 - DIoU）
+    glra_sigma_cap=20,  # GLRA sigma 超過多少 px 就不配對了（設 None 可還原舊行為做 ablation）
     # GLRA adaptive threshold
     glra_adaptive=False,  # 設 False 可還原舊行為做 ablation
     glra_sigma_scale=30.0,  # σ 超過 30px → 拿到完整 thresh_range 加分

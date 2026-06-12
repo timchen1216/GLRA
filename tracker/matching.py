@@ -408,6 +408,7 @@ def glra_distance(
     sigma_scale=30.0,
     thresh_range=0.25,
     max_thresh=0.85,
+    sigma_cap=None,
 ):
     """
     GLRA (GPR Lost-track Re-Association) cost matrix with optional
@@ -480,6 +481,11 @@ def glra_distance(
         sim = ious(pred_arr, det_tlbrs)  # shape (k, m)
 
     for local_i, global_i in enumerate(valid_idx):
+        # print(
+        #     f"GLRA sigma: {pred_sigmas[local_i]:.1f} px, lost {target_frame - lost_tracks[global_i].end_frame} frames"
+        # )
+        if sigma_cap is not None and pred_sigmas[local_i] > sigma_cap:
+            continue
         costs = np.clip(1.0 - sim[local_i], 0.0, 1.0)
 
         if base_thresh is not None:
