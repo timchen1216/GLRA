@@ -52,10 +52,11 @@ track = dict(
     use_gmc_history=False,
     use_glra=True,  # 開關
     gpr_min_lost=1,  # GPR 最多能恢復幾幀丟失的軌跡
-    gpr_max_lost=3,  # GPR 最多能恢復幾幀丟失的軌跡
-    gpr_min_obs=15,  # GPR 最少需要幾筆觀測
+    gpr_max_lost=1,  # GPR 最多能恢復幾幀丟失的軌跡
+    gpr_min_obs=6,  # GPR 最少需要幾筆觀測
     gpr_history_len=30,  # 歷史長度
     glra_thresh=0.45,  # 配對 cost threshold（1 - DIoU）
+    glra_sigma_cap=20,
     # GLRA adaptive threshold
     glra_adaptive=False,  # 設 False 可還原舊行為做 ablation
     glra_sigma_scale=80.0,  # 解析度大，σ 要到 80px 才算真的不確定

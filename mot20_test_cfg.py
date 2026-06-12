@@ -55,7 +55,7 @@ track = dict(
     gpr_max_lost=1,
     gpr_min_obs=6,
     gpr_history_len=30,
-    glra_thresh=0.35,  # 唯一改動:0.45 → 0.35
+    glra_thresh=0.45,  # 唯一改動:0.45 → 0.35
     # is fuse scores
     mot20=True,
     # trackers

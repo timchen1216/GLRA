@@ -1,10 +1,10 @@
-gt_folder_path=/home/caig/data/MOT17/train
-val_map_path=/home/caig/data/MOT17/17train_seqmap.txt
-track_results_path=/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results
+# gt_folder_path=/home/caig/data/MOT17/train
+# val_map_path=/home/caig/data/MOT17/17train_seqmap.txt
+# track_results_path=/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results
 
-# gt_folder_path=/home/caig/data/MOT20/train
-# val_map_path=/home/caig/data/MOT20/20train_seqmap.txt
-# track_results_path=/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results
+gt_folder_path=/home/caig/data/MOT20/train
+val_map_path=/home/caig/data/MOT20/20train_seqmap.txt
+track_results_path=/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results
 
 # need to change 'gt_val_half.txt' or 'gt.txt'
 val_type='{gt_folder}/{seq}/gt/gt.txt'

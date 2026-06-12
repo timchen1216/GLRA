@@ -167,6 +167,7 @@ class MOTEvaluator:
                         print(
                             f"[GLRA] {video_names[video_id - 1]}: "
                             f"attempts={s['attempts']} recovered={s['recovered']} "
+                            f"confirmed={s['confirmed']} reverted={s['reverted']} "
                             f"lost_frames mean={lf.mean():.1f} max={lf.max()}"
                         )
                     if self.args.track.byte:
@@ -271,6 +272,7 @@ class MOTEvaluator:
                     print(
                         f"[GLRA] {video_names[video_id]}: "
                         f"attempts={s['attempts']} recovered={s['recovered']} "
+                        f"confirmed={s['confirmed']} reverted={s['reverted']} "
                         f"lost_frames mean={lf.mean():.1f} max={lf.max()}"
                     )
 

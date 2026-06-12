@@ -281,12 +281,22 @@ class SparseTracker(object):
         self.glra_sigma_cap = getattr(args, "glra_sigma_cap", None)
         self.use_gmc_history = getattr(args, "use_gmc_history", False)
         STrack.gpr_maxlen = self.gpr_history_len
+        # ── GLRA delayed confirmation ────────────────────────────────────
+        self.glra_confirm = getattr(args, "glra_confirm", False)
+        # 一致性檢查門檻:外插多一幀,稍微放寬 base thresh
+        self.glra_confirm_thresh = getattr(
+            args, "glra_confirm_thresh", min(self.glra_thresh + 0.1, 0.6)
+        )
+        self.glra_pending_recs = []  # 上一幀救回、等待確認的紀錄
+        self.retro_outputs = []  # 確認成功後要回填的 (frame, tlwh, id, score)
         # GLRA per-sequence stats
         self.glra_stats = {
             "attempts": 0,
             "recovered": 0,
             "sigmas": [],
             "lost_frames": [],
+            "confirmed": 0,
+            "reverted": 0,
         }
 
         # GLRA uncertainty-adaptive threshold config
@@ -482,6 +492,29 @@ class SparseTracker(object):
             # Compensate GPR observation history for camera motion
             if self.use_glra and self.use_gmc_history and self.pre_img is not None:
                 STrack.multi_gmc_history(strack_pool, warp[:2, :])
+            # Warp pending-recovery backups so a rollback at t+1 lands in
+            # the current frame's coordinate system (matters for 05/10/11/13)
+            if self.glra_confirm and self.glra_pending_recs:
+                H = warp[:2, :]
+                R = H[:2, :2]
+                R8x8 = np.kron(np.eye(4, dtype=float), R)
+                t_vec = H[:2, 2]
+                for rec in self.glra_pending_recs:
+                    b = rec["backup"]
+                    mean = R8x8.dot(b["mean"])
+                    mean[:2] += t_vec
+                    b["mean"] = mean
+                    b["covariance"] = R8x8.dot(b["covariance"]).dot(R8x8.T)
+                    b["gpr_obs"] = [
+                        (
+                            fid,
+                            R[0, 0] * cx + R[0, 1] * cy + t_vec[0],
+                            R[1, 0] * cx + R[1, 1] * cy + t_vec[1],
+                            w,
+                            h,
+                        )
+                        for fid, cx, cy, w, h in b["gpr_obs"]
+                    ]
 
         # DCM
         activated_starcks, refind_stracks, u_track, u_detection_high = self.DCM(
@@ -568,12 +601,37 @@ class SparseTracker(object):
             for itracked, idet in glra_matches:
                 track = gpr_stracks[itracked]
                 det = u_detection_sec[idet]
+
+                backup = None
+                if self.glra_confirm:
+                    # 救援前狀態快照(供回滾)
+                    backup = dict(
+                        mean=track.mean.copy(),
+                        covariance=track.covariance.copy(),
+                        gpr_obs=list(track.gpr_obs),
+                        frame_id=track.frame_id,
+                        score=track.score,
+                        tracklet_len=track.tracklet_len,
+                    )
+
                 if track.state == TrackState.Tracked:
                     track.update(det, self.frame_id)
                     activated_starcks.append(track)
                 else:
                     track.re_activate(det, self.frame_id, new_id=False)
                     refind_stracks.append(track)
+
+                if self.glra_confirm:
+                    track.glra_pending = True
+                    self.glra_pending_recs.append(
+                        dict(
+                            track=track,
+                            backup=backup,
+                            out_tlwh=track.tlwh.copy(),
+                            out_score=track.score,
+                            recovered_frame=self.frame_id,
+                        )
+                    )
         # ─────────────────────────────────────────────────────────────────────
 
         # Deal with unconfirmed tracks, usually tracks with only one beginning frame
@@ -621,7 +679,67 @@ class SparseTracker(object):
         self.lost_stracks = sub_stracks(self.lost_stracks, self.removed_stracks)
         self.removed_stracks.extend(removed_stracks)
         # get scores of lost tracks
-        output_stracks = [track for track in self.tracked_stracks if track.is_activated]
+        # ── GLRA delayed confirmation: resolve last frame's pendings ─────
+        if self.glra_confirm and self.glra_pending_recs:
+            still_pending = []
+            for rec in self.glra_pending_recs:
+                if rec["recovered_frame"] == self.frame_id:
+                    still_pending.append(rec)  # 本幀新增的,下一幀再結算
+                    continue
+
+                track = rec["track"]
+                matched_again = (
+                    track.frame_id == self.frame_id
+                    and track.state == TrackState.Tracked
+                )
+
+                consistent = True
+                if matched_again:
+                    # 軌跡一致性:用「救援前」的歷史外插到本幀,
+                    # 防止錯接到別人身上後持續吃對方偵測(identity theft)
+                    shim = type("S", (), {"gpr_obs": rec["backup"]["gpr_obs"]})()
+                    pred = gpr_predict_bbox(shim, self.frame_id, self.gpr_min_obs)
+                    if pred is not None:
+                        pred_tlbr, _ = pred
+                        sim = dious(
+                            pred_tlbr[None, :].astype(np.float64),
+                            track.tlbr[None, :].astype(np.float64),
+                        )[0, 0]
+                        consistent = (1.0 - sim) <= self.glra_confirm_thresh
+
+                if matched_again and consistent:
+                    track.glra_pending = False
+                    self.glra_stats["confirmed"] += 1
+                    self.retro_outputs.append(
+                        (
+                            rec["recovered_frame"],
+                            rec["out_tlwh"],
+                            track.track_id,
+                            rec["out_score"],
+                        )
+                    )
+                else:
+                    # 回滾:KF / GPR 歷史 / 時間戳全部還原,救援視同未發生
+                    b = rec["backup"]
+                    track.mean = b["mean"]
+                    track.covariance = b["covariance"]
+                    track.gpr_obs = b["gpr_obs"]
+                    track.frame_id = b["frame_id"]  # end_frame 跟著還原
+                    track.score = b["score"]
+                    track.tracklet_len = b["tracklet_len"]
+                    track.glra_pending = False
+                    track.mark_lost()
+                    self.glra_stats["reverted"] += 1
+                    self.tracked_stracks = [
+                        t for t in self.tracked_stracks if t.track_id != track.track_id
+                    ]
+                    self.lost_stracks.append(track)
+            self.glra_pending_recs = still_pending
+        output_stracks = [
+            track
+            for track in self.tracked_stracks
+            if track.is_activated and not getattr(track, "glra_pending", False)
+        ]
         self.pre_img = curr_img
         return output_stracks
 
