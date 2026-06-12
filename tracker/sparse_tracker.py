@@ -281,6 +281,13 @@ class SparseTracker(object):
         self.glra_sigma_cap = getattr(args, "glra_sigma_cap", None)
         self.use_gmc_history = getattr(args, "use_gmc_history", False)
         STrack.gpr_maxlen = self.gpr_history_len
+        # GLRA per-sequence stats
+        self.glra_stats = {
+            "attempts": 0,
+            "recovered": 0,
+            "sigmas": [],
+            "lost_frames": [],
+        }
 
         # GLRA uncertainty-adaptive threshold config
         # When enabled, each lost track's matching threshold is relaxed
@@ -547,6 +554,12 @@ class SparseTracker(object):
             )
             match_thresh = effective_thresh if self.glra_adaptive else self.glra_thresh
             glra_matches, u_glra_tracks, _ = linear_assignment(glra_dists, match_thresh)
+
+            self.glra_stats["attempts"] += len(gpr_stracks)
+            self.glra_stats["recovered"] += len(glra_matches)
+            for itracked, idet in glra_matches:
+                t = gpr_stracks[itracked]
+                self.glra_stats["lost_frames"].append(self.frame_id - t.end_frame)
 
             # Remove already-marked-lost tracks that GLRA recovers
             recovered_ids = {gpr_stracks[i].track_id for i, _ in glra_matches}

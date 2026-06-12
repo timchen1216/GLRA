@@ -335,20 +335,20 @@ if __name__ == "__main__":
     #     "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_dti"
     # )
 
-    # data_root = "/home/caig/data/MOT17/test"
-    # txt_path = (
-    #     "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test"
-    # )
-    # save_path = (
-    #     "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test_dti"
-    # )
-    data_root = "/home/caig/data/MOT20/test"
+    data_root = "/home/caig/data/MOT17/test"
     txt_path = (
-        "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test"
+        "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test"
     )
     save_path = (
-        "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test_dti"
+        "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test_dti"
     )
+    # data_root = "/home/caig/data/MOT20/test"
+    # txt_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test"
+    # )
+    # save_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test_dti"
+    # )
 
     mkdir_if_missing(save_path)
     dti(txt_path, save_path, n_min=5, n_dti=20)

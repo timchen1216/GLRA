@@ -49,11 +49,11 @@ track = dict(
     use_diou=True,
     # GLRA
     use_glra=True,  # 開關
-    gpr_min_lost=1,  # GPR 最多能恢復幾幀丟失的軌跡
-    gpr_max_lost=8,  # GPR 最多能恢復幾幀丟失的軌跡
-    gpr_min_obs=5,  # GPR 最少需要幾筆觀測
-    gpr_history_len=30,  # 歷史長度
-    glra_thresh=0.45,  # 配對 cost threshold（1 - DIoU）
+    gpr_min_lost=1,
+    gpr_max_lost=2,  # 8 → 2,FP 的主要來源就是救太久以前丟的
+    gpr_min_obs=10,  # 5 → 10,只救歷史可靠的長 track
+    gpr_history_len=30,
+    glra_thresh=0.40,  # 0.45 → 0.40,收緊配對門檻
     # is fuse scores
     mot20=False,
     # trackers
@@ -65,7 +65,7 @@ track = dict(
     # detector model settings
     fp16=True,
     fuse=True,
-    val_ann="train.json",
+    val_ann="test.json",
     # is public dets using
     is_public=False,
 )
