@@ -143,6 +143,24 @@ def dious(atlbrs, btlbrs):
     return diou
 
 
+def containment(det_tlbr, obstacle_tlbrs):
+    """每個 obstacle 對 det 的包含度 = 交集面積 / det 面積。回傳 shape [N_obstacle]."""
+    if len(obstacle_tlbrs) == 0:
+        return np.zeros(0, dtype=np.float64)
+    d = det_tlbr
+    da = max((d[2] - d[0]), 0.0) * max((d[3] - d[1]), 0.0)
+    if da <= 0:
+        return np.zeros(len(obstacle_tlbrs), dtype=np.float64)
+    obs = np.asarray(obstacle_tlbrs, dtype=np.float64)
+    ix1 = np.maximum(d[0], obs[:, 0])
+    iy1 = np.maximum(d[1], obs[:, 1])
+    ix2 = np.minimum(d[2], obs[:, 2])
+    iy2 = np.minimum(d[3], obs[:, 3])
+    iw = np.clip(ix2 - ix1, 0.0, None)
+    ih = np.clip(iy2 - iy1, 0.0, None)
+    return (iw * ih) / da
+
+
 def diou_distance(atracks, btracks):
     """
     Compute cost based on DIoU.

@@ -303,6 +303,17 @@ class SparseTracker(object):
             "confirm_costs_pass": [],  # 通過者的 1-DIoU
             "confirm_costs_fail": [],  # 被打掉者的 1-DIoU
         }
+        # ── 路線一:候選品質 gates ───────────────────────────────────────
+        # fragment gate: 候選 det 被任一 active track 包含(交集/det面積)超過
+        #   containment 門檻 → 視為遮擋碎片,剔除。用 containment 而非 IoU,
+        #   因碎片面積小、IoU 不高但幾乎整個落在遮擋者框內。
+        self.glra_frag_gate = getattr(args, "glra_frag_gate", False)
+        self.glra_frag_contain = getattr(args, "glra_frag_contain", 0.7)
+        # height gate: 候選 det 高度與 GPR 預測高度偏差超過比例 → 剔除。
+        #   行人遮擋碎片多是下半身被切,高度縮水是最穩定的訊號。
+        self.glra_height_gate = getattr(args, "glra_height_gate", False)
+        self.glra_height_tol = getattr(args, "glra_height_tol", 0.3)
+        self.glra_stats_extra = {"gated_frag": 0, "gated_height": 0}
 
         # GLRA uncertainty-adaptive threshold config
         # When enabled, each lost track's matching threshold is relaxed
@@ -575,22 +586,63 @@ class SparseTracker(object):
         # Try to recover unmatched lost tracks using GPR trajectory prediction
         # against leftover low-score detections from second DCM.
         if self.use_glra and len(gpr_stracks) > 0 and len(u_detection_sec) > 0:
-            glra_dists, effective_thresh = glra_distance(
-                gpr_stracks,
-                u_detection_sec,
-                self.frame_id,
-                use_diou=self.use_diou,
-                min_obs=self.gpr_min_obs,
-                sigma_cap=self.glra_sigma_cap,
-                # Adaptive mode: pass base_thresh so glra_distance computes
-                # per-track sigma_penalty and pre-gates the cost matrix.
-                # effective_thresh (max adaptive threshold used) is returned
-                # and passed to linear_assignment as cost_limit.
-                base_thresh=self.glra_thresh if self.glra_adaptive else None,
-                sigma_scale=self.glra_sigma_scale,
-                thresh_range=self.glra_thresh_range,
-                max_thresh=self.glra_max_thresh,
-            )
+            # ── 路線一:候選品質 gates ──────────────────────────────────
+            glra_dets = u_detection_sec
+            if self.glra_frag_gate or self.glra_height_gate:
+                # 遮擋者 = 本幀仍存活的 active track(剛 update 過的)
+                obstacle_tlbrs = [
+                    t.tlbr for t in activated_starcks if t.state == TrackState.Tracked
+                ]
+                # 每個候選 lost track 的 GPR 預測高度(供 height gate)
+                pred_h = {}
+                if self.glra_height_gate:
+                    for t in gpr_stracks:
+                        p = gpr_predict_bbox(t, self.frame_id, self.gpr_min_obs)
+                        if p is not None:
+                            ptlbr, _ = p
+                            pred_h[t.track_id] = max(ptlbr[3] - ptlbr[1], 1.0)
+
+                kept = []
+                for det in glra_dets:
+                    # fragment gate
+                    if self.glra_frag_gate and len(obstacle_tlbrs) > 0:
+                        c = containment(det.tlbr, obstacle_tlbrs)
+                        if c.max() >= self.glra_frag_contain:
+                            self.glra_stats_extra["gated_frag"] += 1
+                            continue
+                    kept.append(det)
+                glra_dets = kept
+
+            if len(glra_dets) == 0:
+                glra_matches = []
+            else:
+                glra_dists, effective_thresh = glra_distance(
+                    gpr_stracks,
+                    glra_dets,
+                    self.frame_id,
+                    use_diou=self.use_diou,
+                    min_obs=self.gpr_min_obs,
+                    sigma_cap=self.glra_sigma_cap,
+                    # Adaptive mode: pass base_thresh so glra_distance computes
+                    # per-track sigma_penalty and pre-gates the cost matrix.
+                    # effective_thresh (max adaptive threshold used) is returned
+                    # and passed to linear_assignment as cost_limit.
+                    base_thresh=self.glra_thresh if self.glra_adaptive else None,
+                    sigma_scale=self.glra_sigma_scale,
+                    thresh_range=self.glra_thresh_range,
+                    max_thresh=self.glra_max_thresh,
+                )
+                # height gate:把高度不一致的 (track, det) 配對成本設為無窮大
+                if self.glra_height_gate and len(pred_h) > 0:
+                    for ti, t in enumerate(gpr_stracks):
+                        ph = pred_h.get(t.track_id)
+                        if ph is None:
+                            continue
+                        for di, det in enumerate(glra_dets):
+                            dh = det.tlbr[3] - det.tlbr[1]
+                            if abs(dh - ph) / ph > self.glra_height_tol:
+                                glra_dists[ti, di] = np.inf
+                                self.glra_stats_extra["gated_height"] += 1
             match_thresh = effective_thresh if self.glra_adaptive else self.glra_thresh
             glra_matches, u_glra_tracks, _ = linear_assignment(glra_dists, match_thresh)
 
