@@ -313,7 +313,7 @@ class SparseTracker(object):
         #   行人遮擋碎片多是下半身被切,高度縮水是最穩定的訊號。
         self.glra_height_gate = getattr(args, "glra_height_gate", False)
         self.glra_height_tol = getattr(args, "glra_height_tol", 0.3)
-        self.glra_stats_extra = {"gated_frag": 0, "gated_height": 0}
+        self.glra_stats_extra = {"gated_frag": 0, "gated_height_pairs": 0}
 
         # GLRA uncertainty-adaptive threshold config
         # When enabled, each lost track's matching threshold is relaxed
@@ -614,7 +614,7 @@ class SparseTracker(object):
                 glra_dets = kept
 
             if len(glra_dets) == 0:
-                glra_matches = []
+                glra_matches, u_glra_tracks = [], list(range(len(gpr_stracks)))
             else:
                 glra_dists, effective_thresh = glra_distance(
                     gpr_stracks,
@@ -642,9 +642,13 @@ class SparseTracker(object):
                             dh = det.tlbr[3] - det.tlbr[1]
                             if abs(dh - ph) / ph > self.glra_height_tol:
                                 glra_dists[ti, di] = np.inf
-                                self.glra_stats_extra["gated_height"] += 1
-            match_thresh = effective_thresh if self.glra_adaptive else self.glra_thresh
-            glra_matches, u_glra_tracks, _ = linear_assignment(glra_dists, match_thresh)
+                                self.glra_stats_extra["gated_height_pairs"] += 1
+                match_thresh = (
+                    effective_thresh if self.glra_adaptive else self.glra_thresh
+                )
+                glra_matches, u_glra_tracks, _ = linear_assignment(
+                    glra_dists, match_thresh
+                )
 
             self.glra_stats["attempts"] += len(gpr_stracks)
             self.glra_stats["recovered"] += len(glra_matches)
@@ -658,7 +662,7 @@ class SparseTracker(object):
 
             for itracked, idet in glra_matches:
                 track = gpr_stracks[itracked]
-                det = u_detection_sec[idet]
+                det = glra_dets[idet]
 
                 backup = None
                 if self.glra_confirm:

@@ -171,12 +171,18 @@ class MOTEvaluator:
                             if fc
                             else "fail_cost n/a"
                         )
+                        se = getattr(tracker, "glra_stats_extra", {})
+                        gate_str = (
+                            f"gated_frag={se.get('gated_frag', 0)} "
+                            f"gated_height_pairs={se.get('gated_height_pairs', 0)}"
+                        )
                         print(
                             f"[GLRA] {video_names[video_id - 1]}: "
+                            f"recovered={s['recovered']} "
                             f"confirmed={s['confirmed']} reverted={s['reverted']} "
                             f"(unmatched={s['reverted_unmatched']} "
                             f"inconsistent={s['reverted_inconsistent']}) "
-                            f"| {fail_str}"
+                            f"| {gate_str} | {fail_str}"
                         )
                     if self.args.track.byte:
                         if "levels" in self.args.track.experiment_name:
@@ -299,12 +305,18 @@ class MOTEvaluator:
                         if fc
                         else "fail_cost n/a"
                     )
+                    se = getattr(tracker, "glra_stats_extra", {})
+                    gate_str = (
+                        f"gated_frag={se.get('gated_frag', 0)} "
+                        f"gated_height_pairs={se.get('gated_height_pairs', 0)}"
+                    )
                     print(
                         f"[GLRA] {video_names[video_id]}: "
+                        f"recovered={s['recovered']} "
                         f"confirmed={s['confirmed']} reverted={s['reverted']} "
                         f"(unmatched={s['reverted_unmatched']} "
                         f"inconsistent={s['reverted_inconsistent']}) "
-                        f"| {fail_str}"
+                        f"| {gate_str} | {fail_str}"
                     )
 
         timer_avgs = np.asarray(timer_avgs)
