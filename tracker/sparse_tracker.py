@@ -561,7 +561,7 @@ class SparseTracker(object):
             activated_starcks,
             refind_stracks,
             self.args.depth_levels_low,
-            0.3,
+            0.35,
             is_fuse=False,
         )
         for track in u_strack:

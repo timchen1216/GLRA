@@ -6,8 +6,7 @@ from .models.model_utils import get_model
 # build dataloader
 dataloader = OmegaConf.create()
 dataloader.test = L(build_test_loader)(
-    test_size=(896, 1600),  # (736, 1920)
-    infer_batch=1,  # for tracking process frame by frame
+    test_size=(800, 1440), infer_batch=1  # for tracking process frame by frame
 )
 
 # build model
@@ -22,8 +21,8 @@ model = L(get_model)(
 
 # build train cfg
 train = dict(
-    output_dir="./yolox_mix20",
-    init_checkpoint="/home/caig/pretrain/bytetrack_x_mot20.tar",
+    output_dir="./yolox_dance_sparse",
+    init_checkpoint="/home/caig/pretrain/bytetrack_dance.pth.tar",
     # model ema
     model_ema=dict(
         enabled=False,
@@ -35,40 +34,31 @@ train = dict(
     device="cuda",
 )
 
-# build tracker. For mot20, dancetrack -- unenabled GMC: 368 - 373 in sparse_tracker.py
+# build tracker
 track = dict(
-    experiment_name="yolox_mix20_det",
-    folder_name="track_results_test",
-    track_thresh=0.6,
+    experiment_name="yolox_dance_sparse_det",
+    folder_name="track_results",
+    track_thresh=0.7,
     track_buffer=60,
-    match_thresh=0.6,
+    match_thresh=0.85,
     min_box_area=100,
     down_scale=4,
     depth_levels=1,
-    depth_levels_low=8,
+    depth_levels_low=12,
     confirm_thresh=0.7,
+    # DIoU
     use_diou=True,
-    # GLRA
-    use_gmc_history=False,
-    use_glra=True,  # 開關
-    gpr_min_lost=1,
-    gpr_max_lost=1,
-    gpr_min_obs=6,
-    gpr_history_len=30,
-    glra_thresh=0.45,
-    # is fuse scores
-    mot20=True,
-    # trackers
+    mot20=False,
     byte=False,
     deep=True,
-    bot=False,
-    sort=False,
-    ocsort=False,
-    # detector model settings
     fp16=True,
     fuse=True,
-    # val json
-    val_ann="test.json",
-    # is public dets using
+    val_ann="train.json",
+    # val_ann="test.json",
     is_public=False,
+    sort=False,
+    ocsort=False,
 )
+
+# For dancetrack--unenable GMC: 368 - 373 in sparse_tracker.py
+# Change the thresh 0.3 to 0.35 during low-score matching

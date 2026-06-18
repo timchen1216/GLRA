@@ -178,11 +178,17 @@ Category ids in annotations are not in [1, #categories]! We'll apply a mapping f
     return dataset_dicts
 
 
-VAL_JSON = "/home/caig/data/MOT17/annotations/train.json"
-VAL_PATH = "/home/caig/data/MOT17/train"
+# VAL_JSON = "/home/caig/data/MOT17/annotations/train.json"
+# VAL_PATH = "/home/caig/data/MOT17/train"
 
 # VAL_JSON = "/home/caig/data/MOT20/annotations/train.json"
 # VAL_PATH = "/home/caig/data/MOT20/train"
+
+VAL_JSON = "/home/caig/data/DanceTrack/annotations/train.json"
+VAL_PATH = "/home/caig/data/DanceTrack/train"
+
+VAL_JSON = "/home/caig/data/DanceTrack/annotations/val.json"
+VAL_PATH = "/home/caig/data/DanceTrack/val"
 
 # VAL_JSON = "/home/caig/data/MOT17/annotations/test.json"
 # VAL_PATH = "/home/caig/data/MOT17/test"
@@ -190,9 +196,15 @@ VAL_PATH = "/home/caig/data/MOT17/train"
 # VAL_JSON = "/home/caig/data/MOT20/annotations/test.json"
 # VAL_PATH = "/home/caig/data/MOT20/test"
 
+# VAL_JSON = "/home/caig/data/DanceTrack/annotations/test.json"
+# VAL_PATH = "/home/caig/data/DanceTrack/test"
+
 DatasetCatalog.register(
     "my_val", lambda: load_coco_json(VAL_JSON, VAL_PATH, "my_val", ["id"])
 )
+# MetadataCatalog.get("my_val").set(
+#     thing_classes=["pedestrian"], json_file=VAL_JSON, image_root=VAL_PATH  # pedestrian
+# )
 MetadataCatalog.get("my_val").set(
-    thing_classes=["pedestrian"], json_file=VAL_JSON, image_root=VAL_PATH  # pedestrian
+    thing_classes=["dancer"], json_file=VAL_JSON, image_root=VAL_PATH  # dancer
 )

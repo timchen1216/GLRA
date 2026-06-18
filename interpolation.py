@@ -271,7 +271,11 @@ def write_results_score(filename, results):
 
 
 def dti(txt_path, save_path, n_min=25, n_dti=20):
-    seq_txts = sorted(glob.glob(os.path.join(txt_path, "*.txt")))
+    seq_txts = sorted(
+        p
+        for p in glob.glob(os.path.join(txt_path, "*.txt"))
+        if os.path.basename(p).startswith(("MOT17", "MOT20"))
+    )
     for seq_txt in seq_txts:
         seq_name = seq_txt.split("/")[-1]
         seq_data = np.loadtxt(seq_txt, dtype=np.float64, delimiter=",")

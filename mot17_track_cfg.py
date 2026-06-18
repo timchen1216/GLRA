@@ -59,9 +59,9 @@ track = dict(
     glra_confirm=False,  # 是否要等 GLRA 配對成功才正式把 track 加回 tracked_stracks（設 False 可還原舊行為做 ablation）
     glra_confirm_thresh=0.55,  # 一致性檢查門檻(1 - DIoU)
     glra_confirm_grace=1,  # 未匹配的寬限幀數;診斷後若 unmatched 為主因改成 1
-    glra_frag_gate=True,  # 碎片排除
+    glra_frag_gate=False,  # 碎片排除
     glra_frag_contain=0.7,  # 包含度門檻
-    glra_height_gate=True,  # 高度一致性
+    glra_height_gate=False,  # 高度一致性
     glra_height_tol=0.3,  # 高度容忍比例
     # GLRA adaptive threshold
     glra_adaptive=False,  # 設 False 可還原舊行為做 ablation

@@ -46,7 +46,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input_dir",
         type=str,
-        default="./yolox_mix17/yolox_mix17_det/track_results_test_dti",
+        default="./yolox_mix17/yolox_mix17_det/track_results_test",
         help="Directory containing MOT17-XX.txt result files",
     )
     args = parser.parse_args()
