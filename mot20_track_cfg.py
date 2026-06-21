@@ -47,23 +47,25 @@ track = dict(
     depth_levels=1,
     depth_levels_low=8,
     confirm_thresh=0.7,
-    use_diou=False,
+    use_diou=True,
     # GLRA
     use_gmc_history=False,
-    use_glra=False,  # 開關
-    gpr_min_lost=1,  # GPR 最多能恢復幾幀丟失的軌跡
-    gpr_max_lost=5,  # GPR 最多能恢復幾幀丟失的軌跡
-    gpr_min_obs=6,  # GPR 最少需要幾筆觀測
-    gpr_history_len=30,  # 歷史長度
-    glra_thresh=0.45,  # 配對 cost threshold（1 - DIoU）
-    glra_sigma_cap=10,
-    glra_confirm=True,  # 是否要等 GLRA 配對成功才正式把 track 加回 tracked_stracks（設 False 可還原舊行為做 ablation）
+    use_glra=True,  # 開關
+    gpr_min_lost=1,
+    gpr_max_lost=8,  # 10→8，密集場景長 lost 配對品質掉很快
+    gpr_min_obs=6,  # 保留
+    gpr_history_len=30,  # 保留
+    glra_thresh=0.38,  # 0.45→0.38，這是主要槓桿
+    glra_sigma_cap=6,  # 10→6，MOT20 下作用有限但無害，可作保險絲；若想完全交給 cost 也可保留 10
+    glra_confirm=False,  # 是否要等 GLRA 配對成功才正式把 track 加回 tracked_stracks（設 False 可還原舊行為做 ablation）
     glra_confirm_thresh=0.55,
     # GLRA adaptive threshold
     glra_adaptive=False,  # 設 False 可還原舊行為做 ablation
     glra_sigma_scale=80.0,  # 解析度大，σ 要到 80px 才算真的不確定
     glra_thresh_range=0.10,  # 最多放寬到 0.55
     glra_max_thresh=0.55,  # 與 0.45+0.10 對齊，不留額外空間
+    glra_diag=True,
+    glra_diag_path="/home/caig/repo/SparseTrack/glra_diag_mot20.csv",
     # is fuse scores
     mot20=True,
     # trackers

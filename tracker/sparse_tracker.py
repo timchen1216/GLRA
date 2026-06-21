@@ -313,7 +313,30 @@ class SparseTracker(object):
         #   行人遮擋碎片多是下半身被切,高度縮水是最穩定的訊號。
         self.glra_height_gate = getattr(args, "glra_height_gate", False)
         self.glra_height_tol = getattr(args, "glra_height_tol", 0.3)
-        self.glra_stats_extra = {"gated_frag": 0, "gated_height_pairs": 0}
+        # density gate: GPR 預測點附近若有 >max_neighbors 個候選 det,
+        #   association 視為歧義,跳過該 lost track。對應 MOT17-03 / DanceTrack
+        #   val 的 dense scene 失敗模式 (FP spike from identity swap).
+        self.glra_density_gate = getattr(args, "glra_density_gate", False)
+        self.glra_density_expand = getattr(args, "glra_density_expand", 1.0)
+        self.glra_density_max_neighbors = getattr(args, "glra_density_max_neighbors", 1)
+        self.glra_stats_extra = {
+            "gated_frag": 0,
+            "gated_height_pairs": 0,
+            "gated_density": 0,
+        }
+
+        # GLRA diagnostic logging.  When `glra_diag` is True, every committed
+        # GLRA recovery appends one row of per-match features to
+        # `glra_diag_path` (a single CSV across all sequences).  The per-row
+        # `seq` column is taken from `glra_diag_seq` so an external eval
+        # script can tag records by sequence by setting
+        #     args.glra_diag_seq = "<seq_name>"
+        # before each new tracker instance, OR by calling
+        # `tracker.set_diag_seq(seq_name)` directly.
+        self.glra_diag = getattr(args, "glra_diag", False)
+        self.glra_diag_path = getattr(args, "glra_diag_path", "./glra_diag.csv")
+        self.glra_diag_seq = getattr(args, "glra_diag_seq", "unknown")
+        self._glra_diag_header_written = False
 
         # GLRA uncertainty-adaptive threshold config
         # When enabled, each lost track's matching threshold is relaxed
@@ -327,6 +350,178 @@ class SparseTracker(object):
         self.glra_sigma_scale = getattr(args, "glra_sigma_scale", 30.0)
         self.glra_thresh_range = getattr(args, "glra_thresh_range", 0.25)
         self.glra_max_thresh = getattr(args, "glra_max_thresh", 0.85)
+
+        # ── GLRA tiered (per-lost_duration) threshold ───────────────────────
+        # Diagnostic on DanceTrack val revealed that the cost band [0.35, 0.45]
+        # (where GLRA is more lenient than DCM stage 2's 0.35) contains
+        # disproportionately many identity-swap recoveries, and that wrong
+        # rate rises sharply with `lost_duration` (lost=1: ~16%; lost≥4: ~45%).
+        # `glra_tiered_thresh` lets the caller use different match thresholds
+        # at different lost_durations, e.g. {1: 0.45, 2: 0.35, 3: 0.35}.
+        # Tracks with lost_duration not in the dict fall back to
+        # `glra_tiered_fallback`; if that is None, such tracks are not matched.
+        # Overrides `glra_adaptive` when set.
+        self.glra_tiered_thresh = getattr(args, "glra_tiered_thresh", None)
+        self.glra_tiered_fallback = getattr(args, "glra_tiered_fallback", None)
+
+    # ── GLRA diagnostic logging ─────────────────────────────────────────────
+    def set_diag_seq(self, seq_name):
+        """Tag subsequent GLRA recoveries with this sequence name in the
+        diagnostic CSV.  Call once per sequence from the eval loop."""
+        self.glra_diag_seq = str(seq_name)
+
+    _GLRA_DIAG_FIELDS = [
+        "seq",
+        "frame",
+        "track_id",
+        "lost_duration",
+        "gpr_sigma_px",
+        "cost",
+        "track_recent_speed",
+        "implied_speed",
+        "motion_ratio",
+        "nearest_active_iou",
+        "nearest_active_dist",
+        "n_neighbors",
+        "track_last_cx",
+        "track_last_cy",
+        "track_last_w",
+        "track_last_h",
+        "pred_cx",
+        "pred_cy",
+        "pred_w",
+        "pred_h",
+        "det_cx",
+        "det_cy",
+        "det_w",
+        "det_h",
+        "det_score",
+    ]
+
+    def _record_glra_diag(
+        self,
+        track,
+        det,
+        pred_tlbr,
+        sigma_px,
+        cost,
+        active_tracks,
+        glra_dets,
+    ):
+        """Append one row of per-recovery diagnostic features to the diag CSV.
+
+        Captured BEFORE the GLRA update commits, so track.tlbr / track.gpr_obs
+        reflect the pre-recovery state (last seen position, observation history).
+        Features chosen to test four failure hypotheses:
+          - fragment-of-active     → nearest_active_iou / nearest_active_dist
+          - motion-implausible     → motion_ratio
+          - long-horizon GPR drift → lost_duration × gpr_sigma_px
+          - high-cost squeeze-in   → cost (relative to glra_thresh)
+        """
+        import os
+        import csv
+
+        # Track features (pre-update)
+        if track.gpr_obs:
+            last_fid, last_cx, last_cy, last_w, last_h = track.gpr_obs[-1]
+        else:
+            last_cx = last_cy = last_w = last_h = 0.0
+        lost_duration = self.frame_id - track.end_frame
+
+        # Recent motion speed (px/frame), averaged over up to 5 most recent obs
+        recent_speed = 0.0
+        if len(track.gpr_obs) >= 2:
+            recent = track.gpr_obs[-5:]
+            speeds = []
+            for i in range(1, len(recent)):
+                df = recent[i][0] - recent[i - 1][0]
+                if df <= 0:
+                    continue
+                dx = recent[i][1] - recent[i - 1][1]
+                dy = recent[i][2] - recent[i - 1][2]
+                speeds.append(((dx * dx + dy * dy) ** 0.5) / df)
+            if speeds:
+                recent_speed = float(np.mean(speeds))
+
+        det_tlbr = np.asarray(det.tlbr, dtype=np.float64)
+        det_cx = float((det_tlbr[0] + det_tlbr[2]) / 2.0)
+        det_cy = float((det_tlbr[1] + det_tlbr[3]) / 2.0)
+        det_w = float(det_tlbr[2] - det_tlbr[0])
+        det_h = float(det_tlbr[3] - det_tlbr[1])
+
+        # Implied jump from track's last seen position to the matched detection
+        dist_to_det = ((det_cx - last_cx) ** 2 + (det_cy - last_cy) ** 2) ** 0.5
+        implied_speed = dist_to_det / max(lost_duration, 1)
+        motion_ratio = implied_speed / max(recent_speed, 1e-6)
+
+        # Competition from active tracks already updated this frame
+        nearest_active_iou = 0.0
+        nearest_active_dist = -1.0
+        if active_tracks:
+            active_tlbrs = np.asarray([t.tlbr for t in active_tracks], dtype=np.float64)
+            iou_row = ious(det_tlbr[None, :], active_tlbrs)[0]
+            nearest_active_iou = float(iou_row.max())
+            act_cx = (active_tlbrs[:, 0] + active_tlbrs[:, 2]) / 2.0
+            act_cy = (active_tlbrs[:, 1] + active_tlbrs[:, 3]) / 2.0
+            d = np.sqrt((act_cx - det_cx) ** 2 + (act_cy - det_cy) ** 2)
+            nearest_active_dist = float(d.min())
+
+        # Candidate-pool density at the GPR prediction
+        if glra_dets:
+            glra_det_tlbrs = np.asarray([d.tlbr for d in glra_dets], dtype=np.float64)
+        else:
+            glra_det_tlbrs = np.zeros((0, 4), dtype=np.float64)
+        n_neighbors = count_candidates_in_box(
+            pred_tlbr, glra_det_tlbrs, expand=self.glra_density_expand
+        )
+
+        pred_cx = float((pred_tlbr[0] + pred_tlbr[2]) / 2.0)
+        pred_cy = float((pred_tlbr[1] + pred_tlbr[3]) / 2.0)
+        pred_w = float(pred_tlbr[2] - pred_tlbr[0])
+        pred_h = float(pred_tlbr[3] - pred_tlbr[1])
+
+        row = {
+            "seq": self.glra_diag_seq,
+            "frame": int(self.frame_id),
+            "track_id": int(track.track_id),
+            "lost_duration": int(lost_duration),
+            "gpr_sigma_px": float(sigma_px),
+            "cost": float(cost),
+            "track_recent_speed": float(recent_speed),
+            "implied_speed": float(implied_speed),
+            "motion_ratio": float(motion_ratio),
+            "nearest_active_iou": float(nearest_active_iou),
+            "nearest_active_dist": float(nearest_active_dist),
+            "n_neighbors": int(n_neighbors),
+            "track_last_cx": float(last_cx),
+            "track_last_cy": float(last_cy),
+            "track_last_w": float(last_w),
+            "track_last_h": float(last_h),
+            "pred_cx": pred_cx,
+            "pred_cy": pred_cy,
+            "pred_w": pred_w,
+            "pred_h": pred_h,
+            "det_cx": det_cx,
+            "det_cy": det_cy,
+            "det_w": det_w,
+            "det_h": det_h,
+            "det_score": float(det.score),
+        }
+
+        diag_dir = os.path.dirname(self.glra_diag_path)
+        if diag_dir:
+            os.makedirs(diag_dir, exist_ok=True)
+        needs_header = (
+            not os.path.exists(self.glra_diag_path)
+            or os.path.getsize(self.glra_diag_path) == 0
+        )
+        with open(self.glra_diag_path, "a", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=self._GLRA_DIAG_FIELDS)
+            if needs_header:
+                w.writeheader()
+            w.writerow(row)
+
+    # ────────────────────────────────────────────────────────────────────────
 
     def get_deep_range(self, obj, step):
         col = []
@@ -561,7 +756,7 @@ class SparseTracker(object):
             activated_starcks,
             refind_stracks,
             self.args.depth_levels_low,
-            0.35,
+            0.3,
             is_fuse=False,
         )
         for track in u_strack:
@@ -631,6 +826,16 @@ class SparseTracker(object):
                     sigma_scale=self.glra_sigma_scale,
                     thresh_range=self.glra_thresh_range,
                     max_thresh=self.glra_max_thresh,
+                    # Density gate: skip lost tracks whose GPR-predicted
+                    # neighborhood is too crowded with candidate detections
+                    # (ambiguous → high FP risk).
+                    density_gate=self.glra_density_gate,
+                    density_expand=self.glra_density_expand,
+                    density_max_neighbors=self.glra_density_max_neighbors,
+                    density_stats=self.glra_stats_extra,
+                    # Tiered per-lost_duration threshold (overrides adaptive).
+                    tiered_thresh=self.glra_tiered_thresh,
+                    tiered_fallback=self.glra_tiered_fallback,
                 )
                 # height gate:把高度不一致的 (track, det) 配對成本設為無窮大
                 if self.glra_height_gate and len(pred_h) > 0:
@@ -644,7 +849,9 @@ class SparseTracker(object):
                                 glra_dists[ti, di] = np.inf
                                 self.glra_stats_extra["gated_height_pairs"] += 1
                 match_thresh = (
-                    effective_thresh if self.glra_adaptive else self.glra_thresh
+                    effective_thresh
+                    if (self.glra_adaptive or self.glra_tiered_thresh is not None)
+                    else self.glra_thresh
                 )
                 glra_matches, u_glra_tracks, _ = linear_assignment(
                     glra_dists, match_thresh
@@ -655,6 +862,28 @@ class SparseTracker(object):
             for itracked, idet in glra_matches:
                 t = gpr_stracks[itracked]
                 self.glra_stats["lost_frames"].append(self.frame_id - t.end_frame)
+
+            # ── Diagnostic logging (before commit) ───────────────────────
+            # Recompute pred_tlbr / sigma per matched track so we can record
+            # them with the recovery row.  Only when --glra-diag is set.
+            if self.glra_diag and len(glra_matches) > 0:
+                for itracked, idet in glra_matches:
+                    track = gpr_stracks[itracked]
+                    det = glra_dets[idet]
+                    pred = gpr_predict_bbox(track, self.frame_id, self.gpr_min_obs)
+                    if pred is None:
+                        continue
+                    pred_tlbr, sigma_px = pred
+                    cost = float(glra_dists[itracked, idet])
+                    self._record_glra_diag(
+                        track,
+                        det,
+                        pred_tlbr,
+                        sigma_px,
+                        cost,
+                        active_tracks=activated_starcks,
+                        glra_dets=glra_dets,
+                    )
 
             # Remove already-marked-lost tracks that GLRA recovers
             recovered_ids = {gpr_stracks[i].track_id for i, _ in glra_matches}

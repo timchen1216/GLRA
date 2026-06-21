@@ -5,13 +5,13 @@
 # track_results_path=/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_glra
 # track_results_path=/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_glra_interp
 
-# gt_folder_path=/home/caig/data/MOT20/train
-# val_map_path=/home/caig/data/MOT20/20train_seqmap.txt
-# track_results_path=/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results
+gt_folder_path=/home/caig/data/MOT20/train
+val_map_path=/home/caig/data/MOT20/20train_seqmap.txt
+track_results_path=/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results
 
-gt_folder_path=/home/caig/data/DanceTrack/train
-val_map_path=/home/caig/data/DanceTrack/train_seqmap.txt
-track_results_path=/home/caig/repo/SparseTrack/yolox_dance_sparse/yolox_dance_sparse_det/track_results
+# gt_folder_path=/home/caig/data/DanceTrack/train
+# val_map_path=/home/caig/data/DanceTrack/train_seqmap.txt
+# track_results_path=/home/caig/repo/SparseTrack/yolox_dance_sparse/yolox_dance_sparse_det/track_results
 
 # gt_folder_path=/home/caig/data/DanceTrack/val
 # val_map_path=/home/caig/data/DanceTrack/val_seqmap.txt

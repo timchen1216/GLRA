@@ -48,6 +48,17 @@ track = dict(
     confirm_thresh=0.7,
     # DIoU
     use_diou=True,
+    # GLRA
+    use_gmc_history=False,
+    use_glra=True,
+    gpr_min_lost=1,
+    gpr_max_lost=12,  # DanceTrack 重現間隔長，給 GPR 中長窗發揮空間
+    gpr_min_obs=5,
+    gpr_history_len=30,
+    glra_thresh=0.45,
+    glra_sigma_cap=50,  # 非線性+長窗→sigma 大，放寬避免擋掉有效外推
+    glra_confirm=False,
+    glra_adaptive=False,
     mot20=False,
     byte=False,
     deep=True,

@@ -46,6 +46,27 @@ track = dict(
     depth_levels=1,
     depth_levels_low=12,
     confirm_thresh=0.7,
+    # DIoU
+    use_diou=True,
+    # GLRA
+    use_gmc_history=False,
+    use_glra=True,
+    gpr_min_lost=1,
+    gpr_max_lost=3,  # ← 從 4 → 3:lost≥4 wrong rate ~45%,直接砍
+    gpr_min_obs=5,
+    gpr_history_len=30,
+    glra_thresh=0.45,  # ← 留著,tiered 模式下會被 override,但 sigma_cap 那條路徑會用
+    glra_sigma_cap=50,  # ← 留著,作為極端 outlier 的最後一道防線
+    # Tiered policy P5(來自 DanceTrack val diagnostic)
+    glra_tiered_thresh={1: 0.45, 2: 0.35, 3: 0.35},
+    glra_tiered_fallback=None,  # 安全網:不在 dict 的 lost_duration 直接不可 match
+    glra_confirm=False,
+    glra_adaptive=False,
+    glra_density_gate=False,  # ← 改成 False,tiered 已經處理了
+    glra_density_expand=1.5,
+    glra_density_max_neighbors=1,
+    glra_diag=True,
+    glra_diag_path="/home/caig/repo/SparseTrack/glra_diag_dancetrack_val.csv",
     mot20=False,
     byte=False,
     deep=True,

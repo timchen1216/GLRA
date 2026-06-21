@@ -191,6 +191,7 @@ class MOTEvaluator:
                             tracker = BYTETracker(self.args.track)
                     elif self.args.track.deep:
                         tracker = SparseTracker(self.args.track)
+                        tracker.set_diag_seq(video_name)
                     elif self.args.track.bot:
                         tracker = BoTSORT(self.args.track)
                     elif self.args.track.sort:

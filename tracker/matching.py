@@ -416,6 +416,52 @@ def gpr_predict_bbox(track, target_frame, min_obs=3):
     return pred_tlbr, sigma_px
 
 
+def count_candidates_in_box(pred_tlbr, det_tlbrs, expand=1.0):
+    """
+    Count how many candidate detections have their center inside the
+    predicted bounding box (optionally expanded around its center by `expand`).
+
+    Used by the GLRA density gate: when multiple detection centers fall inside
+    the GPR prediction's local neighborhood, the lost-track recovery is
+    ambiguous (high risk of identity swap), and GLRA should be suppressed for
+    that lost track.
+
+    Why predicted bbox rather than σ or a fixed pixel radius
+    ────────────────────────────────────────────────────────
+    σ from GPR is small on slow / well-observed tracks (~5–30 px) and a σ-based
+    radius is too tight in dense scenes where the failure actually occurs.
+    A fixed pixel radius is not scale-invariant across MOT17 (1920×1080),
+    MOT20 (very dense, full HD), and DanceTrack (1280×720 with smaller
+    persons).  Using the predicted bbox directly anchors the gate to the
+    object's own scale at that location, giving a single hyper-parameter
+    (`expand`) that transfers across datasets.
+
+    Args:
+        pred_tlbr   : np.ndarray shape (4,) – predicted bbox (x1, y1, x2, y2).
+        det_tlbrs   : np.ndarray shape (m, 4) – candidate bboxes (tlbr).
+        expand      : float – multiplier on box w/h around its center.
+                              1.0 = use predicted bbox as-is (≈ body width);
+                              1.5–2.0 = slightly wider neighborhood.
+
+    Returns:
+        count : int – number of detections whose center lies inside the
+                      (expanded) predicted bbox.
+    """
+    if det_tlbrs.size == 0:
+        return 0
+    cx = (pred_tlbr[0] + pred_tlbr[2]) / 2.0
+    cy = (pred_tlbr[1] + pred_tlbr[3]) / 2.0
+    half_w = (pred_tlbr[2] - pred_tlbr[0]) * expand / 2.0
+    half_h = (pred_tlbr[3] - pred_tlbr[1]) * expand / 2.0
+    x1, x2 = cx - half_w, cx + half_w
+    y1, y2 = cy - half_h, cy + half_h
+
+    det_cx = (det_tlbrs[:, 0] + det_tlbrs[:, 2]) / 2.0
+    det_cy = (det_tlbrs[:, 1] + det_tlbrs[:, 3]) / 2.0
+    inside = (det_cx >= x1) & (det_cx <= x2) & (det_cy >= y1) & (det_cy <= y2)
+    return int(inside.sum())
+
+
 def glra_distance(
     lost_tracks,
     detections,
@@ -427,6 +473,12 @@ def glra_distance(
     thresh_range=0.25,
     max_thresh=0.85,
     sigma_cap=None,
+    density_gate=False,
+    density_expand=1.0,
+    density_max_neighbors=1,
+    density_stats=None,
+    tiered_thresh=None,
+    tiered_fallback=None,
 ):
     """
     GLRA (GPR Lost-track Re-Association) cost matrix with optional
@@ -462,6 +514,42 @@ def glra_distance(
                                       base_thresh (default 0.25).
         max_thresh   : float        – absolute ceiling for adaptive threshold
                                       (default 0.85).
+        sigma_cap    : float|None   – if set, any track whose GPR σ exceeds
+                                      this cap is left un-matchable (row=1.0).
+        density_gate : bool         – if True, suppress GLRA for any lost
+                                      track whose GPR-predicted neighborhood
+                                      contains more than `density_max_neighbors`
+                                      candidate detections (ambiguous match).
+        density_expand : float      – multiplier on predicted bbox w/h used to
+                                      define the local neighborhood
+                                      (1.0 = predicted bbox as-is).
+        density_max_neighbors : int – allowed number of candidate detections
+                                      inside the neighborhood; >this triggers
+                                      the gate.  Default 1 (1 candidate OK,
+                                      2+ = ambiguous → skip).
+        density_stats : dict|None   – if a dict with key "gated_density" is
+                                      provided, gated-track counts accumulate
+                                      into it (for ablation logging).
+        tiered_thresh : dict|None   – per-`lost_duration` matching thresholds,
+                                      e.g. ``{1: 0.45, 2: 0.35, 3: 0.35}``.
+                                      Each lost track's threshold is looked up
+                                      by its actual ``lost_duration`` (=
+                                      ``target_frame - track.end_frame``).
+                                      Cells above the per-track threshold are
+                                      pre-gated to 1.0.  When set, the caller
+                                      should pass ``effective_thresh`` as
+                                      ``linear_assignment``'s ``cost_limit``
+                                      so the widest per-track gate is reachable.
+                                      Overrides ``base_thresh`` (no sigma penalty
+                                      applied in tiered mode).
+        tiered_fallback : float|None – threshold for lost_durations *not* in
+                                      the ``tiered_thresh`` dict.  If ``None``
+                                      (default), such tracks are left
+                                      unmatchable (cost row stays at 1.0).
+                                      Useful as a safety net so ``gpr_max_lost``
+                                      is the only knob controlling the upper
+                                      bound; or set explicitly to extend the
+                                      tiered policy with a relaxed fallback.
 
     Returns:
         cost_matrix    : np.ndarray  shape (len(lost_tracks), len(detections))
@@ -470,7 +558,12 @@ def glra_distance(
                                        disabled (pass this to linear_assignment).
     """
     cost_matrix = np.ones((len(lost_tracks), len(detections)), dtype=np.float64)
-    effective_thresh = base_thresh if base_thresh is not None else 1.0
+    if tiered_thresh is not None:
+        # In tiered mode, the widest gate is unknown a priori; accumulate from
+        # per-track thresholds during the loop.  Start at 0.0 so max() works.
+        effective_thresh = 0.0
+    else:
+        effective_thresh = base_thresh if base_thresh is not None else 1.0
 
     if cost_matrix.size == 0:
         return cost_matrix, effective_thresh
@@ -504,9 +597,40 @@ def glra_distance(
         # )
         if sigma_cap is not None and pred_sigmas[local_i] > sigma_cap:
             continue
+
+        # ── Density gate ─────────────────────────────────────────────
+        # If multiple candidate detections fall inside the GPR-predicted
+        # local neighborhood, the recovery is ambiguous (e.g. dense crowd,
+        # close-interaction dance).  Suppressing GLRA for this track keeps
+        # safe recoveries (isolated re-appearances) while avoiding the FP
+        # spike observed on MOT17-03 and DanceTrack val.
+        if density_gate:
+            n_neighbors = count_candidates_in_box(
+                pred_arr[local_i], det_tlbrs, expand=density_expand
+            )
+            if n_neighbors > density_max_neighbors:
+                if density_stats is not None:
+                    density_stats["gated_density"] = (
+                        density_stats.get("gated_density", 0) + 1
+                    )
+                continue  # leave row at 1.0 (unmatchable)
+
         costs = np.clip(1.0 - sim[local_i], 0.0, 1.0)
 
-        if base_thresh is not None:
+        if tiered_thresh is not None:
+            # ── Tiered per-track threshold (by lost_duration) ─────────────
+            # Overrides the sigma-adaptive mode below: only one per-track
+            # threshold policy can be active at a time.  The threshold is
+            # looked up by the track's actual lost_duration; tracks whose
+            # lost_duration is not in the dict fall back to `tiered_fallback`,
+            # or are left un-matchable if fallback is None.
+            ld = int(target_frame - lost_tracks[global_i].end_frame)
+            tt = tiered_thresh.get(ld, tiered_fallback)
+            if tt is None:
+                continue  # leave row at 1.0 (unmatchable)
+            effective_thresh = max(effective_thresh, tt)
+            costs = np.where(costs <= tt, costs, 1.0)
+        elif base_thresh is not None:
             # ── Uncertainty-adaptive per-track threshold ─────────────────
             sigma = pred_sigmas[local_i]
             sigma_penalty = np.clip(sigma / sigma_scale, 0.0, 1.0) * thresh_range
