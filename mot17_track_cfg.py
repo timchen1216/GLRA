@@ -46,10 +46,10 @@ track = dict(
     depth_levels=1,
     depth_levels_low=3,
     confirm_thresh=0.8,
-    use_diou=True,
+    use_diou=False,
     # GLRA
     use_gmc_history=False,
-    use_glra=True,  # 開關
+    use_glra=False,  # 開關
     gpr_min_lost=1,  # GPR 最多能恢復幾幀丟失的軌跡
     gpr_max_lost=3,  # GPR 最多能恢復幾幀丟失的軌跡
     gpr_min_obs=5,  # GPR 最少需要幾筆觀測

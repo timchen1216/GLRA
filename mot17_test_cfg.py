@@ -46,23 +46,28 @@ track = dict(
     depth_levels=1,
     depth_levels_low=3,
     confirm_thresh=0.8,
-    use_diou=True,
-    # GLRA
+    use_diou=True,  # is diou matching
+    # is fuse scores
     use_gmc_history=False,
     use_glra=True,  # 開關
-    gpr_min_lost=1,
-    gpr_max_lost=8,  # 10→8，密集場景長 lost 配對品質掉很快
-    gpr_min_obs=6,  # 保留
-    gpr_history_len=30,  # 保留
-    glra_thresh=0.38,  # 0.45→0.38，這是主要槓桿
-    glra_sigma_cap=6,  # 10→6，MOT20 下作用有限但無害，可作保險絲；若想完全交給 cost 也可保留 10
+    gpr_min_lost=1,  # GPR 最多能恢復幾幀丟失的軌跡
+    gpr_max_lost=8,  # GPR 最多能恢復幾幀丟失的軌跡
+    gpr_min_obs=5,  # GPR 最少需要幾筆觀測
+    gpr_history_len=30,  # 歷史長度
+    glra_thresh=0.2,  # 配對 cost threshold（1 - DIoU）
+    glra_sigma_cap=20,  # GLRA sigma 超過多少 px 就不配對了（設 None 可還原舊行為做 ablation）
     glra_confirm=False,  # 是否要等 GLRA 配對成功才正式把 track 加回 tracked_stracks（設 False 可還原舊行為做 ablation）
-    glra_confirm_thresh=0.55,
+    glra_confirm_thresh=0.55,  # 一致性檢查門檻(1 - DIoU)
+    glra_confirm_grace=1,  # 未匹配的寬限幀數;診斷後若 unmatched 為主因改成 1
+    glra_frag_gate=False,  # 碎片排除
+    glra_frag_contain=0.7,  # 包含度門檻
+    glra_height_gate=False,  # 高度一致性
+    glra_height_tol=0.3,  # 高度容忍比例
     # GLRA adaptive threshold
     glra_adaptive=False,  # 設 False 可還原舊行為做 ablation
-    glra_sigma_scale=80.0,  # 解析度大，σ 要到 80px 才算真的不確定
-    glra_thresh_range=0.10,  # 最多放寬到 0.55
-    glra_max_thresh=0.55,  # 與 0.45+0.10 對齊，不留額外空間
+    glra_sigma_scale=30.0,  # σ 超過 30px → 拿到完整 thresh_range 加分
+    glra_thresh_range=0.25,  # 最多放寬 0.25
+    glra_max_thresh=0.85,  # 絕對上限
     # is fuse scores
     mot20=False,
     # trackers
