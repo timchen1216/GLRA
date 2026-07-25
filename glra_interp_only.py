@@ -367,25 +367,36 @@ def glra_interp(
 
 
 if __name__ == "__main__":
-    # MOT17 train:
+    # data_root = "/home/caig/data/MOT17/train"
+    # txt_path = "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results"
+    # save_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_dti"
+    # )
+
     data_root = "/home/caig/data/MOT17/train"
-    txt_path = "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results"
-    save_path = "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_glra_interp"
+    txt_path = "/home/caig/repo/SparseTrack/yolox_mix17_ablation/yolox_mix17_ablation_det/track_results"
+    save_path = "/home/caig/repo/SparseTrack/yolox_mix17_ablation/yolox_mix17_ablation_det/track_results_glra"
 
-    # MOT17 test:
     # data_root = "/home/caig/data/MOT17/test"
-    # txt_path  = "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test"
-    # save_path = "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test_glra_interp"
+    # txt_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test"
+    # )
+    # save_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix17/yolox_mix17_det/track_results_test_dti"
+    # )
 
-    # MOT20 train:
     # data_root = "/home/caig/data/MOT20/train"
-    # txt_path  = "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results"
-    # save_path = "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_glra_interp"
+    # txt_path = "/home/caig/repo/SparseTrack/yolox_mix20_ablation/yolox_mix20_ablation_det/track_results"
+    # save_path = "/home/caig/repo/SparseTrack/yolox_mix20_ablation/yolox_mix20_ablation_det/track_results_dti"
 
-    # MOT20 test:
     # data_root = "/home/caig/data/MOT20/test"
-    # txt_path  = "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test"
-    # save_path = "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test_glra_interp"
+    # txt_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test"
+    # )
+
+    # save_path = (
+    #     "/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results_test_dti"
+    # )
 
     mkdir_if_missing(save_path)
     # Match DTI's main(): n_min=5, n_dti=20.

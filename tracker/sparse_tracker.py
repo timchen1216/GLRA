@@ -334,6 +334,11 @@ class SparseTracker(object):
         # before each new tracker instance, OR by calling
         # `tracker.set_diag_seq(seq_name)` directly.
         self.glra_diag = getattr(args, "glra_diag", False)
+        # GLRA figure-dump: when True, every committed GLRA recovery writes
+        # one self-contained JSON (obs history + GPR pred + KF extrapolation
+        # + matched detection) for offline plotting of Figure 4.
+        self.glra_dump = getattr(args, "glra_dump", False)
+        self.glra_dump_dir = getattr(args, "glra_dump_dir", "./glra_cases")
         self.glra_diag_path = getattr(args, "glra_diag_path", "./glra_diag.csv")
         self.glra_diag_seq = getattr(args, "glra_diag_seq", "unknown")
         self._glra_diag_header_written = False
@@ -363,6 +368,15 @@ class SparseTracker(object):
         # Overrides `glra_adaptive` when set.
         self.glra_tiered_thresh = getattr(args, "glra_tiered_thresh", None)
         self.glra_tiered_fallback = getattr(args, "glra_tiered_fallback", None)
+
+        # ── TBD-stage dump (for slide figures) ──────────────────────────────
+        # Set STAGE_DUMP_FRAMES via env, e.g. STAGE_DUMP_FRAMES="173" or "170,173,176"
+        import os as _os
+
+        _f = _os.environ.get("STAGE_DUMP_FRAMES", "")
+        self._stage_dump_frames = {int(x) for x in _f.split(",") if x.strip()}
+        self._stage_dump = []  # list of per-frame records
+        self._stage_cur = None  # record being built this frame
 
     # ── GLRA diagnostic logging ─────────────────────────────────────────────
     def set_diag_seq(self, seq_name):
@@ -521,6 +535,67 @@ class SparseTracker(object):
                 w.writeheader()
             w.writerow(row)
 
+    # ── GLRA figure dump ─────────────────────────────────────────────────────
+    def _dump_glra_case(self, track, det, pred_tlbr, sigma_px, cost):
+        """Write one self-contained JSON per GLRA recovery for offline plotting.
+
+        Captured BEFORE the update commits, so track.gpr_obs is the pre-loss
+        observation history and track.mean is the KF state propagated at
+        constant velocity through the lost interval (its cx, cy is the KF's
+        uncorrected position prediction at the current frame).
+        """
+        import os, json
+
+        os.makedirs(self.glra_dump_dir, exist_ok=True)
+
+        # observation history: list of [frame, cx, cy, w, h]
+        obs = [
+            [int(f), float(cx), float(cy), float(w), float(h)]
+            for (f, cx, cy, w, h) in track.gpr_obs
+        ]
+
+        # KF constant-velocity extrapolation at current frame == track.mean[:2].
+        # (During lost frames the tracker propagates mean without correction.)
+        if track.mean is not None:
+            kf_cx, kf_cy = float(track.mean[0]), float(track.mean[1])
+            kf_w, kf_h = float(track.mean[2]), float(track.mean[3])
+        else:
+            kf_cx = kf_cy = kf_w = kf_h = None
+
+        det_tlbr = np.asarray(det.tlbr, dtype=np.float64)
+        rec = {
+            "seq": self.glra_diag_seq,
+            "frame": int(self.frame_id),
+            "track_id": int(track.track_id),
+            "lost_duration": int(self.frame_id - track.end_frame),
+            "end_frame": int(track.end_frame),  # last observed frame
+            "obs": obs,  # green history
+            "gpr_pred": {  # blue GPR prediction
+                "cx": float((pred_tlbr[0] + pred_tlbr[2]) / 2.0),
+                "cy": float((pred_tlbr[1] + pred_tlbr[3]) / 2.0),
+                "w": float(pred_tlbr[2] - pred_tlbr[0]),
+                "h": float(pred_tlbr[3] - pred_tlbr[1]),
+                "sigma_px": float(sigma_px),
+            },
+            "kf_pred": {  # red KF extrapolation
+                "cx": kf_cx,
+                "cy": kf_cy,
+                "w": kf_w,
+                "h": kf_h,
+            },
+            "det": {  # magenta matched det
+                "cx": float((det_tlbr[0] + det_tlbr[2]) / 2.0),
+                "cy": float((det_tlbr[1] + det_tlbr[3]) / 2.0),
+                "w": float(det_tlbr[2] - det_tlbr[0]),
+                "h": float(det_tlbr[3] - det_tlbr[1]),
+                "score": float(det.score),
+            },
+            "cost": float(cost),
+        }
+        fname = f"{self.glra_diag_seq}_t{track.track_id}_f{self.frame_id}.json"
+        with open(os.path.join(self.glra_dump_dir, fname), "w") as f:
+            json.dump(rec, f, indent=2)
+
     # ────────────────────────────────────────────────────────────────────────
 
     def get_deep_range(self, obj, step):
@@ -668,6 +743,17 @@ class SparseTracker(object):
         scores_keep = scores[remain_inds]
         scores_second = scores[inds_second]
 
+        # ── stage dump: DETECT (high-score dets, x1y1x2y2, no IDs) ──────────
+        if self.frame_id in self._stage_dump_frames:
+            self._stage_cur = {
+                "frame": int(self.frame_id),
+                "detect": [[float(v) for v in box] for box in dets],
+                "predict": [],
+                "update": [],
+            }
+        else:
+            self._stage_cur = None
+
         # tracks preprocess
         unconfirmed = []
         tracked_stracks = []  # type: list[STrack]
@@ -690,6 +776,12 @@ class SparseTracker(object):
 
         # predict the current location with KF
         STrack.multi_predict(strack_pool)
+        # ── stage dump: PREDICT (KF-predicted boxes, per-track color) ───────
+        # Captured before any matching, so track_id is last frame's identity.
+        if self._stage_cur is not None:
+            self._stage_cur["predict"] = [
+                [float(v) for v in t.tlbr] + [int(t.track_id)] for t in strack_pool
+            ]
 
         if not self.mot20:
             # use GMC: for mot20 dancetrack--unenabled GMC: 368 - 373
@@ -885,6 +977,18 @@ class SparseTracker(object):
                         glra_dets=glra_dets,
                     )
 
+            # ── Figure dump (before commit) ──────────────────────────────
+            if self.glra_dump and len(glra_matches) > 0:
+                for itracked, idet in glra_matches:
+                    track = gpr_stracks[itracked]
+                    det = glra_dets[idet]
+                    pred = gpr_predict_bbox(track, self.frame_id, self.gpr_min_obs)
+                    if pred is None:
+                        continue
+                    pred_tlbr, sigma_px = pred
+                    cost = float(glra_dists[itracked, idet])
+                    self._dump_glra_case(track, det, pred_tlbr, sigma_px, cost)
+
             # Remove already-marked-lost tracks that GLRA recovers
             recovered_ids = {gpr_stracks[i].track_id for i, _ in glra_matches}
             lost_stracks = [t for t in lost_stracks if t.track_id not in recovered_ids]
@@ -1050,6 +1154,13 @@ class SparseTracker(object):
             for track in self.tracked_stracks
             if track.is_activated and not getattr(track, "glra_pending", False)
         ]
+        # ── stage dump: UPDATE (final tracks) + flush record ────────────────
+        if self._stage_cur is not None:
+            self._stage_cur["update"] = [
+                [float(v) for v in t.tlbr] + [int(t.track_id)] for t in output_stracks
+            ]
+            self._stage_dump.append(self._stage_cur)
+            self._stage_cur = None
         self.pre_img = curr_img
         return output_stracks
 

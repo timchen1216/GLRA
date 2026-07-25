@@ -154,6 +154,20 @@ class MOTEvaluator:
                 if video_name not in video_names:
                     video_names[video_id] = video_name
                 if frame_id == 1:
+                    # ─── stage dump: flush previous seq before tracker rebuild ───
+                    if getattr(tracker, "_stage_dump", None):
+                        import json
+
+                        dump_name = os.path.join(
+                            result_folder,
+                            "stage_dump_{}.json".format(video_names[video_id - 1]),
+                        )
+                        with open(dump_name, "w") as f:
+                            json.dump(tracker._stage_dump, f)
+                        print(
+                            f"wrote {dump_name} "
+                            f"({len(tracker._stage_dump)} frame(s))"
+                        )
                     # ─── GLRA per-seq stats dump(新增)───
                     if hasattr(tracker, "glra_stats") and len(results) != 0:
                         import numpy as np
@@ -290,6 +304,19 @@ class MOTEvaluator:
                     result_folder, "{}.txt".format(video_names[video_id])
                 )
                 write_results(result_filename, results)
+                # ─── stage dump: flush final seq ───
+                if getattr(tracker, "_stage_dump", None):
+                    import json
+
+                    dump_name = os.path.join(
+                        result_folder,
+                        "stage_dump_{}.json".format(video_names[video_id]),
+                    )
+                    with open(dump_name, "w") as f:
+                        json.dump(tracker._stage_dump, f)
+                    print(
+                        f"wrote {dump_name} " f"({len(tracker._stage_dump)} frame(s))"
+                    )
                 timer_avgs.append(timer.average_time)
                 timer_calls.append(timer.calls)
                 if hasattr(tracker, "glra_stats"):

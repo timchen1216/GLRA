@@ -372,14 +372,10 @@ def gpr_predict_bbox(track, target_frame, min_obs=3):
     cxs_z = (cxs - cx_mean) / cx_std
     cys_z = (cys - cy_mean) / cy_std
 
-    kernel = (
-        DotProduct(sigma_0=0, sigma_0_bounds="fixed")
-        + RBF(length_scale=0.5, length_scale_bounds="fixed")
-        + WhiteKernel(noise_level=0.05, noise_level_bounds="fixed")
-    )
+    kernel = RBF(length_scale=0.5) + WhiteKernel(noise_level=0.05)
     try:
-        gpr_cx = GaussianProcessRegressor(kernel=kernel, optimizer=None)
-        gpr_cy = GaussianProcessRegressor(kernel=kernel, optimizer=None)
+        gpr_cx = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=0)
+        gpr_cy = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=0)
         gpr_cx.fit(frames_norm, cxs_z)
         gpr_cy.fit(frames_norm, cys_z)
 
