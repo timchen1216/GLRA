@@ -11,8 +11,8 @@
 gt_folder_path=/home/caig/data/MOT20/train
 val_map_path=/home/caig/data/MOT20/20train_seqmap.txt
 # track_results_path=/home/caig/repo/SparseTrack/yolox_mix20/yolox_mix20_det/track_results
-track_results_path=/home/caig/repo/SparseTrack/yolox_mix20_ablation/yolox_mix20_ablation_det/track_results
-# track_results_path=/home/caig/repo/SparseTrack/yolox_mix20_ablation/yolox_mix20_ablation_det/track_results_dti
+# track_results_path=/home/caig/repo/SparseTrack/yolox_mix20_ablation/yolox_mix20_ablation_det/track_results
+track_results_path=/home/caig/repo/SparseTrack/yolox_mix20_ablation/yolox_mix20_ablation_det/track_results_dti
 
 
 # gt_folder_path=/home/caig/data/DanceTrack/train

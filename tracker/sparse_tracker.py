@@ -269,7 +269,20 @@ class SparseTracker(object):
         self.down_scale = args.down_scale
         self.layers = args.depth_levels
         self.mot20 = getattr(args, "mot20", False)
+
+        # ── Association metric (IoU family) ─────────────────────────────────
+        # `iou_type` selects the metric used by every association stage:
+        # Depth Cascade Matching (high & low score), the unconfirmed-track
+        # stage, and GLRA's GPR-prediction scoring.  One switch for all of
+        # them, so the GIoU / DIoU / CIoU ablation is a controlled comparison.
+        #   "iou"  – vanilla IoU (SparseTrack baseline)
+        #   "giou" – enclosing-area penalty (Rezatofighi et al., CVPR 2019)
+        #   "diou" – center-distance penalty (this thesis' contribution)
+        #   "ciou" – DIoU + aspect-ratio consistency (Zheng et al., AAAI 2020)
+        # `use_diou` (bool) is still honoured for configs written before
+        # `iou_type` existed: it maps to "diou" / "iou", so old runs reproduce.
         self.use_diou = getattr(args, "use_diou", False)
+        self.iou_type = resolve_iou_type(getattr(args, "iou_type", None), self.use_diou)
 
         # GLRA config
         self.use_glra = getattr(args, "use_glra", False)
@@ -691,11 +704,7 @@ class SparseTracker(object):
                 # update trk
                 track_ = track_ + u_tracks
 
-                dists = (
-                    diou_distance(track_, det_)
-                    if self.use_diou
-                    else iou_distance(track_, det_)
-                )
+                dists = assoc_distance(track_, det_, self.iou_type)
                 if (not self.args.mot20) and is_fuse:
                     dists = fuse_score(dists, det_)
                 matches, u_track_, u_det_ = linear_assignment(dists, thresh)
@@ -907,7 +916,7 @@ class SparseTracker(object):
                     gpr_stracks,
                     glra_dets,
                     self.frame_id,
-                    use_diou=self.use_diou,
+                    iou_type=self.iou_type,
                     min_obs=self.gpr_min_obs,
                     sigma_cap=self.glra_sigma_cap,
                     # Adaptive mode: pass base_thresh so glra_distance computes
@@ -1031,11 +1040,7 @@ class SparseTracker(object):
 
         # Deal with unconfirmed tracks, usually tracks with only one beginning frame
         detections = [d for d in u_detection_high]
-        dists = (
-            diou_distance(unconfirmed, detections)
-            if self.use_diou
-            else iou_distance(unconfirmed, detections)
-        )
+        dists = assoc_distance(unconfirmed, detections, self.iou_type)
         if not self.args.mot20:
             dists = fuse_score(dists, detections)
         matches, u_unconfirmed, u_detection = linear_assignment(
@@ -1097,9 +1102,10 @@ class SparseTracker(object):
                     pred = gpr_predict_bbox(shim, self.frame_id, self.gpr_min_obs)
                     if pred is not None:
                         pred_tlbr, _ = pred
-                        sim = dious(
+                        sim = pairwise_similarity(
                             pred_tlbr[None, :].astype(np.float64),
                             track.tlbr[None, :].astype(np.float64),
+                            self.iou_type,
                         )[0, 0]
                         confirm_cost = 1.0 - sim
                         consistent = confirm_cost <= self.glra_confirm_thresh

@@ -100,18 +100,29 @@ def iou_distance(atracks, btracks):
     return cost_matrix
 
 
-def dious(atlbrs, btlbrs):
+def _bbox_geometry(atlbrs, btlbrs):
     """
-    Compute DIoU between two sets of boxes in tlbr format (vectorized).
-    DIoU = IoU - rho^2(center_a, center_b) / c^2
-    where c is the diagonal of the smallest enclosing box.
-    """
-    atlbrs = np.asarray(atlbrs, dtype=np.float64)
-    btlbrs = np.asarray(btlbrs, dtype=np.float64)
-    result = np.zeros((len(atlbrs), len(btlbrs)), dtype=np.float64)
-    if result.size == 0:
-        return result
+    Shared pairwise geometry for the whole IoU family (IoU / GIoU / DIoU / CIoU).
 
+    Computing these terms once in a single helper keeps the four association
+    metrics numerically consistent -- they differ *only* in which penalty term
+    is subtracted from the same IoU -- which is what makes the GIoU/CIoU
+    ablation a controlled comparison rather than four separate implementations.
+
+    Args:
+        atlbrs : np.ndarray shape (n, 4) -- boxes in tlbr format.
+        btlbrs : np.ndarray shape (m, 4) -- boxes in tlbr format.
+
+    Returns:
+        dict with (all shape (n, m) unless noted):
+            iou          : intersection over union
+            union        : union area
+            enclose_area : area of the smallest enclosing box   (GIoU term)
+            rho2         : squared distance between box centers (DIoU term)
+            c2           : squared diagonal of the enclosing box (DIoU term)
+            wa, ha       : width/height of a-boxes, shape (n, 1) (CIoU term)
+            wb, hb       : width/height of b-boxes, shape (1, m) (CIoU term)
+    """
     a = atlbrs[:, None, :]  # (n, 1, 4)
     b = btlbrs[None, :, :]  # (1, m, 4)
 
@@ -121,6 +132,11 @@ def dious(atlbrs, btlbrs):
     ix2 = np.minimum(a[..., 2], b[..., 2])
     iy2 = np.minimum(a[..., 3], b[..., 3])
     inter = np.maximum(0.0, ix2 - ix1) * np.maximum(0.0, iy2 - iy1)
+
+    wa = (atlbrs[:, 2] - atlbrs[:, 0])[:, None]  # (n, 1)
+    ha = (atlbrs[:, 3] - atlbrs[:, 1])[:, None]  # (n, 1)
+    wb = (btlbrs[:, 2] - btlbrs[:, 0])[None, :]  # (1, m)
+    hb = (btlbrs[:, 3] - btlbrs[:, 1])[None, :]  # (1, m)
 
     area_a = (atlbrs[:, 2] - atlbrs[:, 0]) * (atlbrs[:, 3] - atlbrs[:, 1])
     area_b = (btlbrs[:, 2] - btlbrs[:, 0]) * (btlbrs[:, 3] - btlbrs[:, 1])
@@ -132,15 +148,132 @@ def dious(atlbrs, btlbrs):
     cb = (btlbrs[:, :2] + btlbrs[:, 2:]) / 2.0  # (m, 2)
     rho2 = np.sum((ca[:, None, :] - cb[None, :, :]) ** 2, axis=-1)
 
-    # Squared diagonal of smallest enclosing box
+    # Smallest enclosing box
     ex1 = np.minimum(a[..., 0], b[..., 0])
     ey1 = np.minimum(a[..., 1], b[..., 1])
     ex2 = np.maximum(a[..., 2], b[..., 2])
     ey2 = np.maximum(a[..., 3], b[..., 3])
+    ew = np.maximum(0.0, ex2 - ex1)
+    eh = np.maximum(0.0, ey2 - ey1)
     c2 = (ex2 - ex1) ** 2 + (ey2 - ey1) ** 2
+    enclose_area = ew * eh
 
-    diou = iou - np.where(c2 > 0, rho2 / c2, 0.0)
+    return dict(
+        iou=iou,
+        union=union,
+        enclose_area=enclose_area,
+        rho2=rho2,
+        c2=c2,
+        wa=wa,
+        ha=ha,
+        wb=wb,
+        hb=hb,
+    )
+
+
+def _as_box_array(tlbrs):
+    """Coerce a list/array of tlbr boxes to a contiguous (k, 4) float64 array."""
+    arr = np.asarray(tlbrs, dtype=np.float64)
+    if arr.size == 0:
+        return arr.reshape(0, 4)
+    return arr.reshape(-1, 4)
+
+
+def dious(atlbrs, btlbrs):
+    """
+    Compute DIoU between two sets of boxes in tlbr format (vectorized).
+    DIoU = IoU - rho^2(center_a, center_b) / c^2
+    where c is the diagonal of the smallest enclosing box.
+    """
+    atlbrs = _as_box_array(atlbrs)
+    btlbrs = _as_box_array(btlbrs)
+    result = np.zeros((len(atlbrs), len(btlbrs)), dtype=np.float64)
+    if result.size == 0:
+        return result
+
+    g = _bbox_geometry(atlbrs, btlbrs)
+    diou = g["iou"] - np.where(g["c2"] > 0, g["rho2"] / g["c2"], 0.0)
     return diou
+
+
+def gious(atlbrs, btlbrs):
+    """
+    Compute GIoU between two sets of boxes in tlbr format (vectorized).
+
+        GIoU = IoU - (area(C) - union) / area(C)
+
+    where C is the smallest box enclosing both.  The penalty is an *area*
+    ratio, so GIoU stays informative when the boxes do not overlap at all
+    (IoU == 0) but says nothing about where inside C the boxes sit -- two
+    detections at the same distance from a track but on opposite sides get
+    the same GIoU.  DIoU's center-distance penalty is what breaks that tie,
+    which is the comparison this ablation is meant to expose.
+
+    Range: (-1, 1].  Reference: Rezatofighi et al., CVPR 2019.
+    """
+    atlbrs = _as_box_array(atlbrs)
+    btlbrs = _as_box_array(btlbrs)
+    result = np.zeros((len(atlbrs), len(btlbrs)), dtype=np.float64)
+    if result.size == 0:
+        return result
+
+    g = _bbox_geometry(atlbrs, btlbrs)
+    ac = g["enclose_area"]
+    penalty = np.where(ac > 0, (ac - g["union"]) / np.where(ac > 0, ac, 1.0), 0.0)
+    giou = g["iou"] - penalty
+    return giou
+
+
+def cious(atlbrs, btlbrs):
+    """
+    Compute CIoU between two sets of boxes in tlbr format (vectorized).
+
+        CIoU = IoU - rho^2 / c^2 - alpha * v
+        v     = (4 / pi^2) * (arctan(w_a / h_a) - arctan(w_b / h_b))^2
+        alpha = v / ((1 - IoU) + v)
+
+    CIoU = DIoU + an aspect-ratio consistency term.  For pedestrian MOT the
+    extra term is expected to contribute little: person boxes share a
+    near-constant aspect ratio, so v stays close to 0 and CIoU degenerates
+    towards DIoU.  Reporting that empirically is exactly the point of the
+    ablation -- it shows DIoU's gain comes from the center-distance term and
+    not from generic "better IoU variant" effects.
+
+    Note on alpha: the original paper treats alpha as a constant w.r.t.
+    gradients during *training*.  Here the metric is only used as an
+    association cost at inference, so alpha is computed directly with no
+    stop-gradient needed.
+
+    Reference: Zheng et al., AAAI 2020.
+    """
+    atlbrs = _as_box_array(atlbrs)
+    btlbrs = _as_box_array(btlbrs)
+    result = np.zeros((len(atlbrs), len(btlbrs)), dtype=np.float64)
+    if result.size == 0:
+        return result
+
+    g = _bbox_geometry(atlbrs, btlbrs)
+    iou = g["iou"]
+
+    # DIoU term
+    dist_penalty = np.where(g["c2"] > 0, g["rho2"] / g["c2"], 0.0)
+
+    # Aspect-ratio consistency term.  Degenerate boxes (h <= 0) would make
+    # arctan(w / h) meaningless, so their v is forced to 0 -- CIoU then falls
+    # back to DIoU for that pair rather than producing a NaN.
+    ha_safe = np.where(g["ha"] > 0, g["ha"], 1.0)
+    hb_safe = np.where(g["hb"] > 0, g["hb"], 1.0)
+    ar_a = np.arctan(g["wa"] / ha_safe)
+    ar_b = np.arctan(g["wb"] / hb_safe)
+    v = (4.0 / (np.pi**2)) * (ar_a - ar_b) ** 2
+    v = np.where((g["ha"] > 0) & (g["hb"] > 0), v, 0.0)
+    v = np.broadcast_to(v, iou.shape)
+
+    denom = (1.0 - iou) + v
+    alpha = np.where(denom > 0, v / np.where(denom > 0, denom, 1.0), 0.0)
+
+    ciou = iou - dist_penalty - alpha * v
+    return ciou
 
 
 def containment(det_tlbr, obstacle_tlbrs):
@@ -161,6 +294,20 @@ def containment(det_tlbr, obstacle_tlbrs):
     return (iw * ih) / da
 
 
+def _extract_tlbrs(atracks, btracks):
+    """
+    Accept either raw tlbr arrays or STrack lists and return (atlbrs, btlbrs).
+
+    Shared by the *_distance wrappers so all four IoU variants handle the
+    "already-an-array" case identically.
+    """
+    if (len(atracks) > 0 and isinstance(atracks[0], np.ndarray)) or (
+        len(btracks) > 0 and isinstance(btracks[0], np.ndarray)
+    ):
+        return atracks, btracks
+    return [track.tlbr for track in atracks], [track.tlbr for track in btracks]
+
+
 def diou_distance(atracks, btracks):
     """
     Compute cost based on DIoU.
@@ -168,17 +315,112 @@ def diou_distance(atracks, btracks):
     :type btracks: list[STrack]
     :rtype cost_matrix np.ndarray
     """
-    if (len(atracks) > 0 and isinstance(atracks[0], np.ndarray)) or (
-        len(btracks) > 0 and isinstance(btracks[0], np.ndarray)
-    ):
-        atlbrs = atracks
-        btlbrs = btracks
-    else:
-        atlbrs = [track.tlbr for track in atracks]
-        btlbrs = [track.tlbr for track in btracks]
+    atlbrs, btlbrs = _extract_tlbrs(atracks, btracks)
     _dious = dious(np.asarray(atlbrs), np.asarray(btlbrs))
     cost_matrix = np.clip(1.0 - _dious, 0.0, 1.0)
     return cost_matrix
+
+
+def giou_distance(atracks, btracks):
+    """
+    Compute cost based on GIoU.
+    :type atracks: list[STrack]
+    :type btracks: list[STrack]
+    :rtype cost_matrix np.ndarray
+    """
+    atlbrs, btlbrs = _extract_tlbrs(atracks, btracks)
+    _gious = gious(np.asarray(atlbrs), np.asarray(btlbrs))
+    cost_matrix = np.clip(1.0 - _gious, 0.0, 1.0)
+    return cost_matrix
+
+
+def ciou_distance(atracks, btracks):
+    """
+    Compute cost based on CIoU.
+    :type atracks: list[STrack]
+    :type btracks: list[STrack]
+    :rtype cost_matrix np.ndarray
+    """
+    atlbrs, btlbrs = _extract_tlbrs(atracks, btracks)
+    _cious = cious(np.asarray(atlbrs), np.asarray(btlbrs))
+    cost_matrix = np.clip(1.0 - _cious, 0.0, 1.0)
+    return cost_matrix
+
+
+# ── IoU-family dispatch ──────────────────────────────────────────────────────
+# The association metric is selected by a single config string so that the
+# GIoU / DIoU / CIoU ablation changes exactly one line of the config and
+# nothing in the tracker.  `use_diou=True/False` from older configs still
+# works and maps to "diou" / "iou" (see resolve_iou_type).
+
+IOU_TYPES = ("iou", "giou", "diou", "ciou")
+
+_SIMILARITY_FN = {
+    "iou": ious,
+    "giou": gious,
+    "diou": dious,
+    "ciou": cious,
+}
+
+_DISTANCE_FN = {
+    "iou": iou_distance,
+    "giou": giou_distance,
+    "diou": diou_distance,
+    "ciou": ciou_distance,
+}
+
+
+def resolve_iou_type(iou_type=None, use_diou=False):
+    """
+    Normalise the association-metric selector.
+
+    Precedence: an explicit `iou_type` wins; otherwise fall back to the legacy
+    boolean `use_diou`.  This keeps every pre-existing config (which only has
+    `use_diou`) reproducing byte-identical results after this change.
+
+    Args:
+        iou_type : str|None -- one of IOU_TYPES, case-insensitive.  None means
+                               "not specified, use the legacy flag".
+        use_diou : bool     -- legacy flag from older configs.
+
+    Returns:
+        str -- one of IOU_TYPES.
+
+    Raises:
+        ValueError on an unrecognised iou_type (fail loudly rather than
+        silently running an IoU baseline when a typo'd "clou" was meant).
+    """
+    if iou_type is None:
+        return "diou" if use_diou else "iou"
+    key = str(iou_type).strip().lower()
+    if key not in IOU_TYPES:
+        raise ValueError(f"unknown iou_type={iou_type!r}; expected one of {IOU_TYPES}")
+    return key
+
+
+def pairwise_similarity(atlbrs, btlbrs, iou_type="iou"):
+    """
+    Raw (n, m) similarity matrix between two arrays of tlbr boxes, using the
+    IoU variant named by `iou_type`.  Higher is better.
+
+    Used where the caller needs the similarity itself rather than a cost --
+    e.g. GLRA's GPR-prediction scoring and the delayed-confirmation check.
+    """
+    return _SIMILARITY_FN[resolve_iou_type(iou_type)](atlbrs, btlbrs)
+
+
+def assoc_distance(atracks, btracks, iou_type="iou"):
+    """
+    Association cost matrix between two track lists, using the IoU variant
+    named by `iou_type`.  Single entry point for every matching stage in the
+    tracker, so switching metric touches one config field.
+
+    Costs are clipped to [0, 1].  GIoU / DIoU / CIoU can go negative for
+    distant boxes, which would push cost above 1; since every matching
+    threshold in the tracker is < 1, such pairs are rejected either way and
+    clipping only keeps the cost matrix in the range `lap.lapjv` expects.
+    """
+    return _DISTANCE_FN[resolve_iou_type(iou_type)](atracks, btracks)
 
 
 def v_iou_distance(atracks, btracks):
@@ -463,6 +705,7 @@ def glra_distance(
     detections,
     target_frame,
     use_diou=True,
+    iou_type=None,
     min_obs=3,
     base_thresh=None,
     sigma_scale=30.0,
@@ -498,7 +741,15 @@ def glra_distance(
         lost_tracks  : list[STrack] – unmatched tracks after second DCM
         detections   : list[STrack] – unmatched low-score detections
         target_frame : int          – current frame_id
-        use_diou     : bool         – use DIoU instead of IoU
+        use_diou     : bool         – legacy flag: use DIoU instead of IoU.
+                                      Ignored when `iou_type` is given.
+        iou_type     : str|None     – association metric for the GPR-predicted
+                                      box vs. candidate detections: one of
+                                      "iou" / "giou" / "diou" / "ciou".  None
+                                      falls back to `use_diou`.  Kept as the
+                                      same knob as the DCM stages so the
+                                      ablation switches both consistently
+                                      rather than mixing metrics across stages.
         min_obs      : int          – minimum history length to attempt GPR
         base_thresh  : float|None   – base matching threshold; if None,
                                       adaptive mode is disabled and the cost
@@ -582,10 +833,9 @@ def glra_distance(
         return cost_matrix, effective_thresh
 
     pred_arr = np.asarray(pred_tlbrs, dtype=np.float64)
-    if use_diou:
-        sim = dious(pred_arr, det_tlbrs)  # shape (k, m)
-    else:
-        sim = ious(pred_arr, det_tlbrs)  # shape (k, m)
+    # Same association metric as the DCM stages (iou / giou / diou / ciou),
+    # resolved once here.  shape (k, m)
+    sim = pairwise_similarity(pred_arr, det_tlbrs, resolve_iou_type(iou_type, use_diou))
 
     for local_i, global_i in enumerate(valid_idx):
         # print(
