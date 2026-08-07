@@ -181,14 +181,14 @@ Category ids in annotations are not in [1, #categories]! We'll apply a mapping f
 # VAL_JSON = "/home/caig/data/MOT17/annotations/train.json"
 # # VAL_PATH = "/home/caig/data/MOT17/train"
 
-# VAL_JSON = "/home/caig/data/MOT17/annotations/val_half.json"
-# VAL_PATH = "/home/caig/data/MOT17/train"
+VAL_JSON = "/home/caig/data/MOT17/annotations/val_half.json"
+VAL_PATH = "/home/caig/data/MOT17/train"
 
 # VAL_JSON = "/home/caig/data/MOT20/annotations/train.json"
 # VAL_PATH = "/home/caig/data/MOT20/train"
 
-VAL_JSON = "/home/caig/data/MOT20/annotations/val_half.json"
-VAL_PATH = "/home/caig/data/MOT20/train"
+# VAL_JSON = "/home/caig/data/MOT20/annotations/val_half.json"
+# VAL_PATH = "/home/caig/data/MOT20/train"
 
 # VAL_JSON = "/home/caig/data/DanceTrack/annotations/train.json"
 # VAL_PATH = "/home/caig/data/DanceTrack/train"

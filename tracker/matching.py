@@ -9,6 +9,8 @@ from tracker import kalman_filter
 import time
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import DotProduct, RBF, WhiteKernel
+from tracker import gpr_fast
+from tracker.gpr_fast import _FIT_CACHE, _PRED_CACHE
 
 
 def merge_matches(m1, m2, shape):
@@ -589,58 +591,115 @@ def gpr_predict_bbox(track, target_frame, min_obs=3):
            than a plain average, giving an unbiased pixel-space uncertainty.
 
     track.gpr_obs: list of (frame_id, cx, cy, w, h)
+
+    Caching
+    ───────
+    ℓ and σ²ₙ are still optimised per track by marginal likelihood, but the
+    fitted model is memoised on the observation history.  While a track is
+    lost its history is frozen (nothing is appended until it re-activates),
+    and GLRA queries the same track on every frame of the
+    [gpr_min_lost, gpr_max_lost] window — up to 4x per frame (height gate,
+    glra_distance, diagnostics, confirm rollback).  All of those now share a
+    single fit.  The key is the history itself, so a new detection, the
+    sliding window, and GMC warping all invalidate it automatically.
     """
     obs = track.gpr_obs
     if len(obs) < min_obs:
         return None
 
-    frames = np.array([o[0] for o in obs], dtype=np.float64).reshape(-1, 1)
-    cxs = np.array([o[1] for o in obs], dtype=np.float64)
-    cys = np.array([o[2] for o in obs], dtype=np.float64)
-    ws = np.array([o[3] for o in obs], dtype=np.float64)
-    hs = np.array([o[4] for o in obs], dtype=np.float64)
+    obs_key = tuple(obs)
+    cached = _PRED_CACHE.get((obs_key, target_frame))
+    if cached is not None:
+        gpr_fast.stats["pred_hits"] += 1
+        return cached
 
-    f_min, f_max = frames[0, 0], frames[-1, 0]
-    if f_max == f_min:
-        return None
+    bundle = _FIT_CACHE.get(obs_key)
+    if bundle is None:
+        arr = np.asarray(obs, dtype=np.float64)
+        f_min, f_max = arr[0, 0], arr[-1, 0]
+        if f_max == f_min:
+            return None
 
-    # ── Input: min-max scale to [0, 1] ──────────────────────────────────────
-    frames_norm = (frames - f_min) / (f_max - f_min)
-    target_norm = np.array([[(target_frame - f_min) / (f_max - f_min)]])
+        # ── Input: min-max scale to [0, 1] ──────────────────────────────────
+        frames_norm = (arr[:, 0] - f_min) / (f_max - f_min)
 
-    # ── Output: z-score so prior mean = data mean ───────────────────────────
-    cx_mean, cx_std = cxs.mean(), cxs.std() + 1e-6
-    cy_mean, cy_std = cys.mean(), cys.std() + 1e-6
-    cxs_z = (cxs - cx_mean) / cx_std
-    cys_z = (cys - cy_mean) / cy_std
+        # ── Output: z-score so prior mean = data mean ───────────────────────
+        cxs, cys = arr[:, 1], arr[:, 2]
+        cx_mean, cx_std = cxs.mean(), cxs.std() + 1e-6
+        cy_mean, cy_std = cys.mean(), cys.std() + 1e-6
+        cxs_z = (cxs - cx_mean) / cx_std
+        cys_z = (cys - cy_mean) / cy_std
 
-    kernel = RBF(length_scale=0.5) + WhiteKernel(noise_level=0.05)
-    try:
-        gpr_cx = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=0)
-        gpr_cy = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=0)
-        gpr_cx.fit(frames_norm, cxs_z)
-        gpr_cy.fit(frames_norm, cys_z)
+        try:
+            if gpr_fast.BACKEND == "sklearn":
+                kernel = RBF(length_scale=0.5) + WhiteKernel(noise_level=0.05)
+                X = frames_norm.reshape(-1, 1)
+                states = []
+                for z in (cxs_z, cys_z):
+                    g = GaussianProcessRegressor(
+                        kernel=kernel, n_restarts_optimizer=0
+                    )
+                    g.fit(X, z)
+                    states.append(g)
+            else:
+                states = gpr_fast.fit(frames_norm, (cxs_z, cys_z))
+                if states is None:
+                    return None
+        except Exception:
+            return None
 
-        pred_cx_z, sigma_cx_z = gpr_cx.predict(target_norm, return_std=True)
-        pred_cy_z, sigma_cy_z = gpr_cy.predict(target_norm, return_std=True)
-
-        pred_cx = float(pred_cx_z[0]) * cx_std + cx_mean
-        pred_cy = float(pred_cy_z[0]) * cy_std + cy_mean
-
-        # Back-transform sigma to pixel space and combine as RMS.
-        # sigma_z * per_axis_std converts z-score uncertainty to pixels;
-        # RMS over x/y is geometrically correct (vs plain average).
-        sigma_px = float(
-            np.sqrt(
-                ((sigma_cx_z[0] * cx_std) ** 2 + (sigma_cy_z[0] * cy_std) ** 2) / 2.0
-            )
+        # Use recent average for w/h (size rarely changes drastically)
+        bundle = (
+            states,
+            f_min,
+            f_max,
+            cx_mean,
+            cx_std,
+            cy_mean,
+            cy_std,
+            float(arr[-3:, 3].mean()),
+            float(arr[-3:, 4].mean()),
         )
+        gpr_fast.stats["fit_calls"] += 1
+        gpr_fast._evict_if_needed()
+        _FIT_CACHE[obs_key] = bundle
+    else:
+        gpr_fast.stats["fit_hits"] += 1
+
+    (
+        states,
+        f_min,
+        f_max,
+        cx_mean,
+        cx_std,
+        cy_mean,
+        cy_std,
+        pred_w,
+        pred_h,
+    ) = bundle
+
+    target_norm = (target_frame - f_min) / (f_max - f_min)
+    try:
+        if gpr_fast.BACKEND == "sklearn":
+            q = np.array([[target_norm]])
+            m_cx, s_cx = states[0].predict(q, return_std=True)
+            m_cy, s_cy = states[1].predict(q, return_std=True)
+            m_cx, s_cx, m_cy, s_cy = m_cx[0], s_cx[0], m_cy[0], s_cy[0]
+        else:
+            m_cx, s_cx = gpr_fast.predict(states[0], target_norm)
+            m_cy, s_cy = gpr_fast.predict(states[1], target_norm)
     except Exception:
         return None
 
-    # Use recent average for w/h (size rarely changes drastically)
-    pred_w = float(np.mean(ws[-3:]))
-    pred_h = float(np.mean(hs[-3:]))
+    pred_cx = float(m_cx) * cx_std + cx_mean
+    pred_cy = float(m_cy) * cy_std + cy_mean
+
+    # Back-transform sigma to pixel space and combine as RMS.
+    # sigma_z * per_axis_std converts z-score uncertainty to pixels;
+    # RMS over x/y is geometrically correct (vs plain average).
+    sigma_px = float(
+        np.sqrt(((s_cx * cx_std) ** 2 + (s_cy * cy_std) ** 2) / 2.0)
+    )
 
     pred_tlbr = np.array(
         [
@@ -651,7 +710,9 @@ def gpr_predict_bbox(track, target_frame, min_obs=3):
         ],
         dtype=np.float64,
     )
-    return pred_tlbr, sigma_px
+    result = (pred_tlbr, sigma_px)
+    _PRED_CACHE[(obs_key, target_frame)] = result
+    return result
 
 
 def count_candidates_in_box(pred_tlbr, det_tlbrs, expand=1.0):

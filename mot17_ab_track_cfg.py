@@ -55,7 +55,7 @@ track = dict(
     #   "giou" = 外接框面積懲罰 (Rezatofighi et al., CVPR 2019)
     #   "diou" = 中心距離懲罰（本論文採用）
     #   "ciou" = DIoU + 長寬比一致性 (Zheng et al., AAAI 2020)
-    iou_type="ciou",
+    iou_type="diou",
     use_diou=False,  # legacy 開關，iou_type 有設定時會被忽略；留著讓舊 run 可重現
     # is fuse scores
     use_gmc_history=False,
@@ -64,7 +64,7 @@ track = dict(
     gpr_max_lost=30,  # GPR 最多能恢復幾幀丟失的軌跡
     gpr_min_obs=5,  # GPR 最少需要幾筆觀測
     gpr_history_len=60,  # 歷史長度
-    glra_thresh=0.2,  # 配對 cost threshold（1 - DIoU）
+    glra_thresh=0.1,  # 配對 cost threshold（1 - DIoU）
     glra_sigma_cap=20,  # GLRA sigma 超過多少 px 就不配對了（設 None 可還原舊行為做 ablation）
     glra_confirm=False,  # 是否要等 GLRA 配對成功才正式把 track 加回 tracked_stracks（設 False 可還原舊行為做 ablation）
     glra_confirm_thresh=0.55,  # 一致性檢查門檻(1 - DIoU)
@@ -80,7 +80,7 @@ track = dict(
     glra_max_thresh=0.85,  # 絕對上限
     glra_diag=False,
     glra_diag_path="./glra_diag.csv",  # 跨序列共用一個檔,append
-    glra_dump=True,
+    glra_dump=False,
     glra_dump_dir="./glra_cases",
     mot20=False,
     # trackers

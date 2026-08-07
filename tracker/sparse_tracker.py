@@ -9,6 +9,7 @@ from tracker import pbcvt
 from .kalman_filter import KalmanFilter
 from .matching import *
 from .basetrack import BaseTrack, TrackState
+from . import gpr_fast
 
 
 class STrack(BaseTrack):
@@ -256,6 +257,11 @@ class SparseTracker(object):
 
         self.frame_id = 0
         self.args = args
+
+        # A fresh SparseTracker is constructed per sequence; drop the GPR
+        # fit cache so it never carries stale entries (or memory) across
+        # sequence boundaries.
+        gpr_fast.reset_cache()
 
         if "_half.json" in args.val_ann:
             self.det_thresh = args.track_thresh + 0.1

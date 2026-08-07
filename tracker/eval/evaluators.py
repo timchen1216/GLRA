@@ -2,6 +2,7 @@ import os
 import torch
 import logging, tqdm
 import numpy as np
+import time
 from .timer import Timer
 from collections import defaultdict
 from detectron2.utils import comm
@@ -111,6 +112,10 @@ class MOTEvaluator:
             tracker = OCSort(0.4)  # for 17-0.6 20-0.4
 
         timer = Timer()
+        # Association-only timing, reported separately from the end-to-end
+        # (detector + tracker) FPS so the tracking cost can be quoted on its own.
+        assoc_time = 0.0
+        assoc_calls = 0
         ori_thresh = self.args.track.track_thresh
         ori_track_buffer = self.args.track.track_buffer
         video_id = 0
@@ -252,7 +257,10 @@ class MOTEvaluator:
                 det_instances = outputs[0]["instances"]
 
             if det_instances is not None:
+                _t_assoc = time.perf_counter()
                 online_targets = tracker.update(det_instances, batch_data[0]["ori_img"])
+                assoc_time += time.perf_counter() - _t_assoc
+                assoc_calls += 1
                 online_tlwhs = []
                 online_ids = []
                 online_scores = []
@@ -354,3 +362,20 @@ class MOTEvaluator:
         logger.info(
             "Time elapsed: {:.2f} seconds, FPS: {:.2f}".format(all_time, 1.0 / avg_time)
         )
+        if assoc_calls:
+            logger.info(
+                "Association only (tracker.update): {:.2f} seconds over {} frames, "
+                "FPS: {:.1f}".format(assoc_time, assoc_calls, assoc_calls / assoc_time)
+            )
+            from tracker import gpr_fast
+
+            st = gpr_fast.stats
+            total = st["fit_calls"] + st["fit_hits"] + st["pred_hits"]
+            if total:
+                logger.info(
+                    "GPR: {} fits for {} gpr_predict_bbox calls "
+                    "({:.1f}x reuse, backend={})".format(
+                        st["fit_calls"], total,
+                        total / max(st["fit_calls"], 1), gpr_fast.BACKEND,
+                    )
+                )
